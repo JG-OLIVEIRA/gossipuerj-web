@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import "./photo-background.css";
 
 export const metadata: Metadata = {
   title: "Gossip UERJ | A fonte não oficial do campus",

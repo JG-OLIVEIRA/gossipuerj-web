@@ -1,0 +1,119 @@
+.pink-page {
+  background-color: #fff;
+  background-image: url('/gossip-uerj.jpg');
+  background-position: center top;
+  background-size: cover;
+  background-attachment: fixed;
+}
+
+button:not(:disabled) {
+  transition: transform 160ms ease, filter 160ms ease, box-shadow 160ms ease;
+}
+
+button:not(:disabled):hover {
+  background: var(--pink);
+  color: #fff;
+  filter: brightness(1.12);
+  transform: translate(-2px, -2px);
+}
+
+.site-nav a:hover {
+  background: var(--pink);
+  color: #fff;
+}
+
+.site-nav a {
+  transition: transform 180ms ease, background-color 180ms ease;
+}
+
+.site-nav .nav-active {
+  background: var(--pink);
+  color: #fff;
+}
+
+.site-nav a:hover {
+  transform: skew(-8deg) translateY(-2px);
+}
+
+.under-construction-page {
+  align-items: center;
+  background: var(--paper);
+  background-image: url('/gossip-uerj.jpg');
+  background-position: center;
+  background-size: cover;
+  display: flex;
+  min-height: 650px;
+  justify-content: center;
+  padding: 40px 20px;
+}
+
+.under-construction {
+  align-items: center;
+  animation: construction-enter 700ms cubic-bezier(.2, 1.4, .5, 1), construction-pulse 2.2s ease-in-out 700ms infinite;
+  background: var(--yellow);
+  border: 5px solid var(--ink);
+  box-shadow: 9px 9px 0 var(--ink);
+  color: var(--ink);
+  display: flex;
+  gap: 20px;
+  justify-content: center;
+  margin: 20px;
+  max-width: 680px;
+  min-height: 150px;
+  padding: 28px 36px;
+  text-align: left;
+  width: calc(100% - 40px);
+}
+
+.under-construction strong,
+.under-construction div > span {
+  display: block;
+}
+
+.under-construction strong {
+  font-size: clamp(18px, 3vw, 28px);
+  text-transform: uppercase;
+}
+
+.under-construction div > span {
+  font-size: 14px;
+}
+
+.construction-icon {
+  animation: construction-bounce 900ms ease-in-out infinite alternate;
+  font-size: 48px;
+}
+
+.construction-dots {
+  animation: construction-dots 1.2s steps(4, end) infinite, construction-sparkle 1.8s ease-in-out infinite;
+  font-size: 30px;
+  letter-spacing: 5px;
+  width: 52px;
+}
+
+@keyframes construction-pulse {
+  50% { background: #fff36b; }
+}
+
+@keyframes construction-bounce {
+  to { transform: rotate(-22deg) translateY(-8px) scale(1.12); }
+}
+
+@keyframes construction-enter {
+  from { opacity: 0; transform: scale(.7) rotate(-4deg); }
+  to { opacity: 1; transform: scale(1) rotate(0); }
+}
+
+@keyframes construction-sparkle {
+  50% { color: var(--pink); transform: scale(1.18) rotate(5deg); }
+}
+
+@keyframes construction-dots {
+  0%, 20% { opacity: .25; }
+  50% { opacity: .65; }
+  100% { opacity: 1; }
+}
+
+button:not(:disabled):active {
+  transform: translate(1px, 1px);
+}
