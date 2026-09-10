@@ -44,7 +44,8 @@ export default function LoginPage() {
 
   async function loadMyPosts(token: string) {
     try {
-      setMyPosts(await api.myPosts(token));
+      const page = await api.myPosts(token);
+      setMyPosts(page.content);
     } catch {
       setMyPosts([]);
     }

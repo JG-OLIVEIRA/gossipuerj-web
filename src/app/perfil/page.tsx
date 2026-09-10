@@ -106,7 +106,8 @@ export default function PerfilPage() {
         setProfileEmail(user.email ?? savedEmail);
 
         try {
-          const posts = await api.myPosts(token);
+          const postsPage = await api.myPosts(token);
+          const posts = postsPage.content;
           if (active) {
             setMyPosts(posts);
 
@@ -120,7 +121,7 @@ export default function PerfilPage() {
               }
             });
             const likesResults = await Promise.all(likesPromises);
-            const sum = likesResults.reduce((acc, curr) => acc + curr, 0);
+            const sum = likesResults.reduce((acc: number, curr: number) => acc + curr, 0);
             if (active) setTotalLikesCount(sum);
           }
         } catch {

@@ -94,11 +94,20 @@ export type CommentRequest = {
 export type CommentResponse = {
   id: string;
   content: string;
-  authorId?: string;
-  authorName?: string;
   createdAt: string;
-  replies?: CommentResponse[];
 };
+
+export type PageResponse<T> = {
+  content: T[];
+  page: number;
+  size: number;
+  totalElements: number;
+  totalPages: number;
+  last: boolean;
+};
+
+export type PageResponsePostResponse = PageResponse<PostResponse>;
+export type PageResponseCommentResponse = PageResponse<CommentResponse>;
 
 export type Comment = {
   id?: string;
@@ -182,11 +191,14 @@ async function request<T>(path: string, options: RequestInit): Promise<T> {
 
 export const api = {
   // Post Controller
-  getAll(): Promise<PostResponse[]> {
-    return request<PostResponse[]>("/api/v1/posts", { method: "GET" });
+  getAll(page = 0, size = 50): Promise<PageResponsePostResponse> {
+    return request<PageResponsePostResponse>(
+      `/api/v1/posts?page=${page}&size=${size}`,
+      { method: "GET" }
+    );
   },
-  posts(): Promise<PostResponse[]> {
-    return this.getAll();
+  posts(page = 0, size = 50): Promise<PageResponsePostResponse> {
+    return this.getAll(page, size);
   },
 
   create(token: string, data: PostRequest): Promise<PostResponse> {
@@ -219,13 +231,16 @@ export const api = {
     return this.delete(token, postId);
   },
 
-  getAllByUserId(token: string): Promise<PostResponse[]> {
-    return request<PostResponse[]>("/api/v1/posts/me", {
-      method: "GET",
-      headers: { Authorization: `Bearer ${token}` },
-    });
+  getAllByUserId(token: string, page = 0, size = 200): Promise<PageResponsePostResponse> {
+    return request<PageResponsePostResponse>(
+      `/api/v1/posts/me?page=${page}&size=${size}`,
+      {
+        method: "GET",
+        headers: { Authorization: `Bearer ${token}` },
+      }
+    );
   },
-  myPosts(token: string): Promise<PostResponse[]> {
+  myPosts(token: string): Promise<PageResponsePostResponse> {
     return this.getAllByUserId(token);
   },
 
@@ -267,12 +282,13 @@ export const api = {
   },
 
   // Comment Controller
-  getPostComments(postId: string): Promise<CommentResponse[]> {
-    return request<CommentResponse[]>(`/api/v1/posts/${encodeURIComponent(postId)}/comments`, {
-      method: "GET",
-    });
+  getPostComments(postId: string, page = 0, size = 100): Promise<PageResponseCommentResponse> {
+    return request<PageResponseCommentResponse>(
+      `/api/v1/posts/${encodeURIComponent(postId)}/comments?page=${page}&size=${size}`,
+      { method: "GET" }
+    );
   },
-  comments(postId: string): Promise<CommentResponse[]> {
+  comments(postId: string): Promise<PageResponseCommentResponse> {
     return this.getPostComments(postId);
   },
 
@@ -284,18 +300,18 @@ export const api = {
     });
   },
 
-  getReplies(postId: string, commentId: string): Promise<CommentResponse[]> {
-    return request<CommentResponse[]>(
-      `/api/v1/posts/${encodeURIComponent(postId)}/comments/${encodeURIComponent(commentId)}/replies`,
+  getReplies(postId: string, commentId: string, page = 0, size = 50): Promise<PageResponseCommentResponse> {
+    return request<PageResponseCommentResponse>(
+      `/api/v1/posts/${encodeURIComponent(postId)}/comments/${encodeURIComponent(commentId)}/replies?page=${page}&size=${size}`,
       { method: "GET" }
     );
   },
-  getCommentReplies(postId: string, commentId: string): Promise<CommentResponse[]> {
+  getCommentReplies(postId: string, commentId: string): Promise<PageResponseCommentResponse> {
     return this.getReplies(postId, commentId);
   },
 
-  replyComment(token: string, postId: string, commentId: string, data: CommentRequest): Promise<void> {
-    return request<void>(
+  replyComment(token: string, postId: string, commentId: string, data: CommentRequest): Promise<CommentResponse> {
+    return request<CommentResponse>(
       `/api/v1/posts/${encodeURIComponent(postId)}/comments/${encodeURIComponent(commentId)}/replies`,
       {
         method: "POST",

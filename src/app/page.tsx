@@ -32,9 +32,13 @@ export default function FeedPage() {
   const [category, setCategory] = useState<PostCategory>("CONFESSION");
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [error, setError] = useState("");
   const [deletingPostId, setDeletingPostId] = useState("");
   const [postLikesMap, setPostLikesMap] = useState<Record<string, number>>({});
+  const [currentPage, setCurrentPage] = useState(0);
+  const [hasMore, setHasMore] = useState(false);
+  const PAGE_SIZE = 20;
 
   // Filtros, Busca e Ordenação
   const [searchQuery, setSearchQuery] = useState("");
@@ -78,9 +82,12 @@ export default function FeedPage() {
       if (!active) return;
 
       try {
-        const loadedPosts = await api.getAll();
+        const pageData = await api.getAll(0, PAGE_SIZE);
         if (!active) return;
+        const loadedPosts = pageData.content;
         setPosts(loadedPosts);
+        setCurrentPage(0);
+        setHasMore(!pageData.last);
 
         // Carregar contagem inicial de likes para ordenação em lotes suaves
         const likesMap: Record<string, number> = {};
@@ -103,8 +110,8 @@ export default function FeedPage() {
 
         if (token) {
           try {
-            const myPosts = await api.getAllByUserId(token);
-            if (active) setMyPostIds(new Set(myPosts.map((post) => post.id)));
+            const myPage = await api.getAllByUserId(token);
+            if (active) setMyPostIds(new Set(myPage.content.map((post) => post.id)));
           } catch {
             if (active) setMyPostIds(new Set());
           }
@@ -124,6 +131,22 @@ export default function FeedPage() {
       active = false;
     };
   }, []);
+
+  async function loadMorePosts() {
+    if (isLoadingMore || !hasMore) return;
+    setIsLoadingMore(true);
+    try {
+      const nextPage = currentPage + 1;
+      const pageData = await api.getAll(nextPage, PAGE_SIZE);
+      setPosts((prev) => [...prev, ...pageData.content]);
+      setCurrentPage(nextPage);
+      setHasMore(!pageData.last);
+    } catch {
+      // falha silenciosa no load more
+    } finally {
+      setIsLoadingMore(false);
+    }
+  }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -525,6 +548,28 @@ export default function FeedPage() {
                 ))
               )}
             </main>
+
+            {/* Botão Carregar Mais Fofocas */}
+            {hasMore && !isLoading && (
+              <div style={{ textAlign: "center", padding: "24px 0 8px" }}>
+                <button
+                  type="button"
+                  className="pink-button"
+                  onClick={loadMorePosts}
+                  disabled={isLoadingMore}
+                  style={{ margin: 0, width: "auto", minWidth: "220px", fontSize: "13px" }}
+                >
+                  {isLoadingMore ? (
+                    <span style={{ display: "inline-flex", alignItems: "center", gap: "8px" }}>
+                      <span className="loading-spinner" style={{ width: "14px", height: "14px", borderWidth: "2px" }} />
+                      Carregando...
+                    </span>
+                  ) : (
+                    "📜 Carregar mais fofocas"
+                  )}
+                </button>
+              </div>
+            )}
 
             {/* Coluna Lateral: Radar do Campus UERJ */}
             <aside className="campus-sidebar">

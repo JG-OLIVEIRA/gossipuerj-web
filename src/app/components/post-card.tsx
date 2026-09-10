@@ -36,6 +36,10 @@ export default function PostCard({
 
   const [commentLikes, setCommentLikes] = useState<Record<string, number>>({});
   const [isLikingComment, setIsLikingComment] = useState<Record<string, boolean>>({});
+  const [commentPage, setCommentPage] = useState(0);
+  const [hasMoreComments, setHasMoreComments] = useState(false);
+  const [isLoadingMoreComments, setIsLoadingMoreComments] = useState(false);
+  const COMMENT_PAGE_SIZE = 20;
 
   useEffect(() => {
     let active = true;
@@ -95,11 +99,17 @@ export default function PostCard({
     }
   }
 
-  async function loadComments() {
-    setIsLoadingComments(true);
+  async function loadComments(page = 0) {
+    if (page === 0) setIsLoadingComments(true);
     try {
-      const data = await api.getPostComments(post.id);
-      setComments(Array.isArray(data) ? data : []);
+      const data = await api.getPostComments(post.id, page, COMMENT_PAGE_SIZE);
+      if (page === 0) {
+        setComments(data.content ?? []);
+      } else {
+        setComments((prev) => [...prev, ...(data.content ?? [])]);
+      }
+      setCommentPage(page);
+      setHasMoreComments(!data.last);
     } catch (err) {
       onError(err instanceof ApiError ? err.message : "Não foi possível carregar os comentários.");
     } finally {
@@ -107,11 +117,27 @@ export default function PostCard({
     }
   }
 
+  async function loadMoreComments() {
+    if (isLoadingMoreComments || !hasMoreComments) return;
+    setIsLoadingMoreComments(true);
+    try {
+      const nextPage = commentPage + 1;
+      const data = await api.getPostComments(post.id, nextPage, COMMENT_PAGE_SIZE);
+      setComments((prev) => [...prev, ...(data.content ?? [])]);
+      setCommentPage(nextPage);
+      setHasMoreComments(!data.last);
+    } catch {
+      // silencioso
+    } finally {
+      setIsLoadingMoreComments(false);
+    }
+  }
+
   function handleToggleComments() {
     const next = !showComments;
     setShowComments(next);
     if (next && comments.length === 0) {
-      void loadComments();
+      void loadComments(0);
     }
   }
 
@@ -151,13 +177,14 @@ export default function PostCard({
 
     setIsSubmittingReply(true);
     try {
-      await api.replyComment(token, post.id, commentId, {
+      const reply = await api.replyComment(token, post.id, commentId, {
         postId: post.id,
         content: replyText.trim(),
       });
+      // Append reply optimistically; also refresh to keep in sync
+      setComments((prev) => [...prev, reply]);
       setReplyText("");
       setReplyingToCommentId(null);
-      await loadComments();
     } catch (err) {
       onError(err instanceof ApiError ? err.message : "Não foi possível responder ao comentário.");
     } finally {
@@ -309,10 +336,8 @@ function formatPostDate(dateStr: string) {
                 <div key={comment.id} className="comment-item">
                   <div className="comment-item-header">
                     <div className="comment-author-badge">
-                      <span className="comment-author-avatar">
-                        {(comment.authorName || "A").charAt(0).toUpperCase()}
-                      </span>
-                      <span className="comment-author">@{comment.authorName || "anônimo"}</span>
+                      <span className="comment-author-avatar">A</span>
+                      <span className="comment-author">@anônimo</span>
                     </div>
                     <span className="comment-time">
                       {comment.createdAt ? formatPostDate(comment.createdAt) : ""}
@@ -341,22 +366,6 @@ function formatPostDate(dateStr: string) {
                     </button>
                   </div>
 
-                  {comment.replies && comment.replies.length > 0 && (
-                    <div className="replies-list">
-                      {comment.replies.map((reply) => (
-                        <div key={reply.id} className="reply-item">
-                          <div className="comment-item-header">
-                            <span className="comment-author">@{reply.authorName || "anônimo"}</span>
-                            <span className="comment-time">
-                              {reply.createdAt ? formatPostDate(reply.createdAt) : ""}
-                            </span>
-                          </div>
-                          <p className="comment-body">{reply.content}</p>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
                   {replyingToCommentId === comment.id && (
                     <div className="reply-form">
                       <input
@@ -378,6 +387,21 @@ function formatPostDate(dateStr: string) {
                   )}
                 </div>
               ))}
+            </div>
+          )}
+
+          {/* Botão Carregar Mais Comentários */}
+          {hasMoreComments && !isLoadingComments && (
+            <div style={{ textAlign: "center", padding: "8px 0 4px" }}>
+              <button
+                type="button"
+                className="comment-action-link"
+                onClick={loadMoreComments}
+                disabled={isLoadingMoreComments}
+                style={{ fontSize: "12px", fontWeight: 700 }}
+              >
+                {isLoadingMoreComments ? "Carregando..." : "💬 Carregar mais comentários"}
+              </button>
             </div>
           )}
 
