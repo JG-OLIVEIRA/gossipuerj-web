@@ -15,6 +15,7 @@ import {
 } from "../../lib/api";
 import SiteFooter from "../components/site-footer";
 import SiteHeader from "../components/site-header";
+import { ALL_UERJ_COURSES, UERJ_COURSES_BY_AREA } from "../../lib/uerj-courses";
 
 function getCrushCourseName(crush?: Crush | CrushResponse): string {
   if (!crush) return "UERJ";
@@ -97,6 +98,8 @@ export default function CrushesPage() {
 
   // Modal de cadastro de perfil
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [selectedModalCourse, setSelectedModalCourse] = useState("");
+  const [customCourseName, setCustomCourseName] = useState("");
   const [isSubmittingCrush, setIsSubmittingCrush] = useState(false);
   const [modalError, setModalError] = useState("");
 
@@ -283,16 +286,20 @@ export default function CrushesPage() {
     setModalError("");
     const form = new FormData(e.currentTarget);
 
+    const formCourse = String(form.get("courseName") ?? "").trim();
+    const formCustomCourse = String(form.get("customCourseName") ?? "").trim();
+    const resolvedCourseName = formCourse === "__OTHER__" ? formCustomCourse : (formCourse || selectedModalCourse);
+
     const payload: CrushRequest = {
       photoUrl: String(form.get("photoUrl") ?? "").trim(),
-      courseName: String(form.get("courseName") ?? "").trim(),
+      courseName: resolvedCourseName,
       description: String(form.get("description") ?? "").trim(),
       gender: String(form.get("gender") ?? "OTHER") as Gender,
       orientation: String(form.get("orientation") ?? "BISEXUAL") as Orientation,
     };
 
     if (!payload.photoUrl || !payload.courseName || !payload.description) {
-      setModalError("Por favor preencha todos os campos obrigatórios.");
+      setModalError("Por favor selecione seu curso da UERJ e preencha todos os campos obrigatórios.");
       setIsSubmittingCrush(false);
       return;
     }
@@ -448,19 +455,27 @@ export default function CrushesPage() {
                   <label>
                     Filtrar por Curso
                     <select value={selectedCourse} onChange={(e) => setSelectedCourse(e.target.value)}>
-                      <option value="Todos">Todos os cursos</option>
-                      {courses.map((course) => (
-                        <option key={course.id} value={course.name}>
-                          {course.name}
-                        </option>
+                      <option value="Todos">Todos os cursos ({Object.values(UERJ_COURSES_BY_AREA).flat().length} cursos)</option>
+                      {Object.entries(UERJ_COURSES_BY_AREA).map(([area, courseList]) => (
+                        <optgroup key={area} label={`Área: ${area}`}>
+                          {courseList.map((course) => (
+                            <option key={course} value={course}>
+                              {course}
+                            </option>
+                          ))}
+                        </optgroup>
                       ))}
-                      {/* Cursos populares caso lista do backend esteja inicializando */}
-                      <option value="Comunicação Social">Comunicação Social</option>
-                      <option value="Direito">Direito</option>
-                      <option value="Engenharia">Engenharia</option>
-                      <option value="História">História</option>
-                      <option value="Medicina">Medicina</option>
-                      <option value="Psicologia">Psicologia</option>
+                      {courses.filter((c) => !ALL_UERJ_COURSES.includes(c.name)).length > 0 && (
+                        <optgroup label="Outros Cursos Cadastrados">
+                          {courses
+                            .filter((c) => !ALL_UERJ_COURSES.includes(c.name))
+                            .map((c) => (
+                              <option key={c.id} value={c.name}>
+                                {c.name}
+                              </option>
+                            ))}
+                        </optgroup>
+                      )}
                     </select>
                   </label>
 
@@ -823,41 +838,42 @@ export default function CrushesPage() {
               </label>
 
               <label>
-                Seu Curso na UERJ *
-                <input
+                Seu Curso de Graduação na UERJ *
+                <select
                   name="courseName"
-                  type="text"
-                  placeholder="Ex: Direito, Comunicação Social, Engenharia..."
+                  value={selectedModalCourse}
+                  onChange={(e) => setSelectedModalCourse(e.target.value)}
                   required
-                  list="course-list-datalist"
-                />
-                <datalist id="course-list-datalist">
-                  {courses.map((c) => (
-                    <option key={c.id} value={c.name} />
+                >
+                  <option value="" disabled>
+                    Selecione seu curso oficial da UERJ...
+                  </option>
+                  {Object.entries(UERJ_COURSES_BY_AREA).map(([area, courseList]) => (
+                    <optgroup key={area} label={`Área: ${area}`}>
+                      {courseList.map((c) => (
+                        <option key={c} value={c}>
+                          {c}
+                        </option>
+                      ))}
+                    </optgroup>
                   ))}
-                  <option value="Administração" />
-                  <option value="Artes Visuais" />
-                  <option value="Ciência da Computação" />
-                  <option value="Ciências Econômicas" />
-                  <option value="Comunicação Social" />
-                  <option value="Design" />
-                  <option value="Direito" />
-                  <option value="Enfermagem" />
-                  <option value="Engenharia Civil" />
-                  <option value="Engenharia Mecânica" />
-                  <option value="Filosofia" />
-                  <option value="História" />
-                  <option value="Jornalismo" />
-                  <option value="Letras" />
-                  <option value="Medicina" />
-                  <option value="Nutrição" />
-                  <option value="Odontologia" />
-                  <option value="Pedagogia" />
-                  <option value="Psicologia" />
-                  <option value="Relações Internacionais" />
-                  <option value="Serviço Social" />
-                </datalist>
+                  <option value="__OTHER__">✨ Outro curso / Digitar manualmente...</option>
+                </select>
               </label>
+
+              {selectedModalCourse === "__OTHER__" && (
+                <label>
+                  Nome do Curso na UERJ *
+                  <input
+                    name="customCourseName"
+                    type="text"
+                    placeholder="Digite o nome do seu curso..."
+                    value={customCourseName}
+                    onChange={(e) => setCustomCourseName(e.target.value)}
+                    required
+                  />
+                </label>
+              )}
 
               <label>
                 Descrição / Fofoca sobre você *
