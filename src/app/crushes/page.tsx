@@ -5,8 +5,6 @@ import Link from "next/link";
 import {
   api,
   ApiError,
-  CourseResponse,
-  Crush,
   CrushRequest,
   CrushResponse,
   Gender,
@@ -15,13 +13,18 @@ import {
 } from "../../lib/api";
 import SiteFooter from "../components/site-footer";
 import SiteHeader from "../components/site-header";
-import { ALL_UERJ_COURSES, UERJ_COURSES_BY_AREA } from "../../lib/uerj-courses";
+import { UERJ_COURSES_BY_AREA } from "../../lib/uerj-courses";
 
-function getCrushCourseName(crush?: Crush | CrushResponse): string {
-  if (!crush) return "UERJ";
-  if ("courseName" in crush && crush.courseName) return crush.courseName;
-  if ("course" in crush && crush.course?.name) return crush.course.name;
-  return "UERJ";
+function getPrivatePhotoUrl(photoUrl: string): string {
+  return `/api/upload?url=${encodeURIComponent(photoUrl)}`;
+}
+
+function getCrushErrorMessage(error: unknown, fallback: string): string {
+  if (!(error instanceof ApiError)) return fallback;
+  if (error.status === 401 || error.status === 403) return "Sua sessão expirou. Entre novamente para continuar.";
+  if (error.status === 409) return "Você já possui um perfil de Crush.";
+  if (error.status >= 500) return "O servidor está indisponível. Tente novamente em instantes.";
+  return fallback;
 }
 
 const genderLabels: Record<Gender, string> = {
@@ -40,61 +43,23 @@ const orientationLabels: Record<Orientation, string> = {
   PANSEXUAL: "Pansexual",
 };
 
-const INITIAL_FALLBACK_CRUSHES: CrushResponse[] = [
-  {
-    id: "demo-crush-1",
-    photoUrl: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500&auto=format&fit=crop&q=80",
-    courseName: "Comunicação Social",
-    description: "Sempre na fila do bandejão ou lendo perto do bosque com fone de ouvido. Procurando alguém pra rachar um açaí.",
-    gender: "FEMALE",
-    orientation: "BISEXUAL",
-  },
-  {
-    id: "demo-crush-2",
-    photoUrl: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=500&auto=format&fit=crop&q=80",
-    courseName: "Direito",
-    description: "Visto na biblioteca do 7º andar com pilha de livros de Constitucional. Fã de MPB e choppada pós-aula.",
-    gender: "MALE",
-    orientation: "HETEROSEXUAL",
-  },
-  {
-    id: "demo-crush-3",
-    photoUrl: "https://images.unsplash.com/photo-1517841905240-472988babdf9?w=500&auto=format&fit=crop&q=80",
-    courseName: "História da Arte",
-    description: "Look vintage impecável no pilotis. Se você também ama filmes cult e feirinhas, manda seu match!",
-    gender: "FEMALE",
-    orientation: "PANSEXUAL",
-  },
-  {
-    id: "demo-crush-4",
-    photoUrl: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=500&auto=format&fit=crop&q=80",
-    courseName: "Engenharia Elétrica",
-    description: "Presença confirmada no Centro Acadêmico e nas noites de karaokê. Prometo que não falo só de exatas.",
-    gender: "MALE",
-    orientation: "HOMOSEXUAL",
-  },
-];
-
 export default function CrushesPage() {
   const [crushes, setCrushes] = useState<CrushResponse[]>([]);
-  const [courses, setCourses] = useState<CourseResponse[]>([]);
-  const [sentMatches, setSentMatches] = useState<MatchResponse[]>([]);
   const [receivedMatches, setReceivedMatches] = useState<MatchResponse[]>([]);
-  const [sentCrushIds, setSentCrushIds] = useState<Set<string>>(new Set());
+  const [discardedCrushIds, setDiscardedCrushIds] = useState<Set<string>>(new Set());
+  const [myCrushId, setMyCrushId] = useState<string | null>(null);
+  const [myCrushPhotoUrl, setMyCrushPhotoUrl] = useState<string | null>(null);
+  const [deckIndex, setDeckIndex] = useState(0);
 
   const [token, setToken] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<"gallery" | "received" | "sent">("gallery");
+  const [activeTab, setActiveTab] = useState<"gallery" | "received">("gallery");
+  const [accessState, setAccessState] = useState<"loading" | "unauthenticated" | "no-crush" | "ready">("loading");
 
   const [isLoadingCrushes, setIsLoadingCrushes] = useState(true);
-  const [isLoadingMatches, setIsLoadingMatches] = useState(false);
+  const [crushError, setCrushError] = useState("");
   const [matchingCrushId, setMatchingCrushId] = useState<string | null>(null);
-  const [processingMatchId, setProcessingMatchId] = useState<string | null>(null);
-
-  // Filtros
-  const [query, setQuery] = useState("");
-  const [selectedCourse, setSelectedCourse] = useState("Todos");
-  const [selectedGender, setSelectedGender] = useState("Todos");
-  const [selectedOrientation, setSelectedOrientation] = useState("Todos");
+  const [revealedInstagram, setRevealedInstagram] = useState<string | null>(null);
+  const [isDeletingCrush, setIsDeletingCrush] = useState(false);
 
   // Modal de cadastro de perfil
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -108,7 +73,6 @@ export default function CrushesPage() {
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
   const [uploadSuccessMessage, setUploadSuccessMessage] = useState("");
-  const [inputMode, setInputMode] = useState<"upload" | "url">("upload");
   const [isDragOver, setIsDragOver] = useState(false);
 
   function resetModalForm() {
@@ -119,7 +83,6 @@ export default function CrushesPage() {
     setIsUploadingPhoto(false);
     setUploadSuccessMessage("");
     setModalError("");
-    setInputMode("upload");
   }
 
   async function uploadToVercelBlob(file: File) {
@@ -154,22 +117,19 @@ export default function CrushesPage() {
 
       if (!res.ok) {
         if (data.missingToken) {
-          // Token do Vercel Blob ainda não setado no ambiente
-          setPhotoUrl(localPreviewUrl);
-          setModalError(
-            "Aviso: BLOB_READ_WRITE_TOKEN não configurado no Vercel. Para testar agora, você também pode inserir o link direto da imagem na aba 'Link da Imagem'."
-          );
+          setPhotoPreview(null);
+          setModalError("BLOB_READ_WRITE_TOKEN não configurado no Vercel. O perfil só pode ser criado após configurar o armazenamento de fotos.");
           return;
         }
         throw new Error(data.error || "Erro no upload da foto.");
       }
 
       setPhotoUrl(data.url);
-      setPhotoPreview(data.url);
+      setPhotoPreview(getPrivatePhotoUrl(data.url));
       setUploadSuccessMessage("Foto armazenada com sucesso no Vercel Blob! ☁️");
     } catch (err: unknown) {
       console.error("Erro no upload:", err);
-      setModalError(err instanceof Error ? err.message : "Erro ao enviar foto para o Vercel Blob.");
+      setModalError("Não conseguimos enviar sua foto. Confira o arquivo e tente novamente.");
     } finally {
       setIsUploadingPhoto(false);
     }
@@ -185,53 +145,70 @@ export default function CrushesPage() {
     }, 4500);
   }
 
-  // Verificar autenticação
+  // Only users with an authenticated crush profile can enter the gallery.
   useEffect(() => {
     let active = true;
-    Promise.resolve().then(() => {
+
+    async function initialize() {
+      const savedToken = typeof window !== "undefined" ? localStorage.getItem("gossipuerj_token") : null;
       if (!active) return;
-      const savedToken = localStorage.getItem("gossipuerj_token");
       setToken(savedToken);
-    });
-    return () => {
-      active = false;
-    };
-  }, []);
-
-  // Carregar Cursos e Crushes
-  useEffect(() => {
-    let active = true;
-
-    async function loadInitialData() {
+      if (!savedToken) {
+        setAccessState("unauthenticated");
+        setIsLoadingCrushes(false);
+        return;
+      }
+      setIsLoadingCrushes(true);
+      setCrushError("");
       try {
-        const [crushesPage, coursesPage] = await Promise.allSettled([
-          api.getAllCrushes(0, 60),
-          api.getCourses(0, 100),
-        ]);
+        const myCrush = await api.getMyCrush(savedToken);
+        setMyCrushId(myCrush.id);
+        setMyCrushPhotoUrl(myCrush.photoUrl);
+        const crushesPage = await api.getAllCrushes(0, 60, undefined, savedToken);
 
         if (!active) return;
-
-        if (crushesPage.status === "fulfilled" && crushesPage.value?.content?.length) {
-          setCrushes(crushesPage.value.content);
-        } else {
-          setCrushes(INITIAL_FALLBACK_CRUSHES);
+        setCrushes(crushesPage?.content ?? []);
+        setAccessState("ready");
+      } catch (err: unknown) {
+        if (active) {
+          setCrushes([]);
+          if (err instanceof ApiError && (err.status === 401 || err.status === 403)) {
+            setAccessState("unauthenticated");
+          } else if (err instanceof ApiError && err.status === 404) {
+            setAccessState("no-crush");
+          } else {
+            setCrushError(getCrushErrorMessage(err, "Não conseguimos carregar os Crushes agora."));
+          }
         }
-
-        if (coursesPage.status === "fulfilled" && coursesPage.value?.content?.length) {
-          setCourses(coursesPage.value.content);
-        }
-      } catch {
-        if (active) setCrushes(INITIAL_FALLBACK_CRUSHES);
       } finally {
         if (active) setIsLoadingCrushes(false);
       }
     }
 
-    void loadInitialData();
+    void initialize();
     return () => {
       active = false;
     };
   }, []);
+
+  // Recarregar crushes manualmente
+  async function reloadCrushes() {
+    setIsLoadingCrushes(true);
+    setCrushError("");
+    try {
+      const data = await api.getAllCrushes(0, 60, undefined, token || undefined);
+      setCrushes(data?.content || []);
+    } catch (err: unknown) {
+      if (err instanceof ApiError && err.status === 403 && !token) {
+        setCrushError("AUTH_REQUIRED");
+      } else {
+        setCrushError(getCrushErrorMessage(err, "Não conseguimos carregar os Crushes agora."));
+      }
+      setCrushes([]);
+    } finally {
+      setIsLoadingCrushes(false);
+    }
+  }
 
   // Carregar Matches do usuário se autenticado
   useEffect(() => {
@@ -239,7 +216,6 @@ export default function CrushesPage() {
     let active = true;
 
     async function loadMatches() {
-      setIsLoadingMatches(true);
       try {
         const [sentRes, receivedRes] = await Promise.allSettled([
           api.getSentMatches(token!),
@@ -248,23 +224,20 @@ export default function CrushesPage() {
 
         if (!active) return;
 
-        if (sentRes.status === "fulfilled" && sentRes.value?.content) {
-          setSentMatches(sentRes.value.content);
-          const ids = new Set<string>();
-          sentRes.value.content.forEach((m) => {
-            if (m.likedCrush?.id) ids.add(m.likedCrush.id);
-            if (m.crush?.id) ids.add(m.crush.id);
-          });
-          setSentCrushIds(ids);
-        }
-
         if (receivedRes.status === "fulfilled" && receivedRes.value?.content) {
           setReceivedMatches(receivedRes.value.content);
         }
+
+        const acceptedMatches = [
+          ...(sentRes.status === "fulfilled" ? sentRes.value.content : []),
+          ...(receivedRes.status === "fulfilled" ? receivedRes.value.content : []),
+        ].filter((match) => match.status === "ACCEPTED");
+        const instagramUsername = acceptedMatches[0]?.likedCrush?.user?.username || acceptedMatches[0]?.crush?.user?.username;
+        if (instagramUsername) setRevealedInstagram(instagramUsername.replace(/^@/, ""));
       } catch {
         // Ignora falhas de match se servidor estiver frio
       } finally {
-        if (active) setIsLoadingMatches(false);
+        // Matches remain intentionally hidden behind the curiosity panel.
       }
     }
 
@@ -281,70 +254,31 @@ export default function CrushesPage() {
       return;
     }
 
-    if (sentCrushIds.has(crush.id)) {
-      showToast("Você já demonstrou interesse nesse perfil!", "💌");
-      return;
-    }
-
     setMatchingCrushId(crush.id);
     try {
-      // Se for id de demonstração inicial
-      if (crush.id.startsWith("demo-")) {
-        setSentCrushIds((prev) => new Set([...prev, crush.id]));
-        showToast("Demonstração de interesse enviada com sucesso!", "💖");
-        return;
-      }
-
       const match = await api.createMatch(token, crush.id);
-      setSentCrushIds((prev) => new Set([...prev, crush.id]));
-      setSentMatches((prev) => [match, ...prev]);
-      showToast("Interesse enviado! Se for recíproco, vai dar Match!", "🎉");
+      setDiscardedCrushIds((prev) => new Set([...prev, crush.id]));
+      setDeckIndex((prev) => prev + 1);
+      const matchedProfile = match.likedCrush || match.crush;
+      const instagramUsername = matchedProfile?.user?.username;
+      if (match.status === "ACCEPTED" && instagramUsername) {
+        setRevealedInstagram(instagramUsername.replace(/^@/, ""));
+        showToast("Deu match! O Instagram foi liberado.", "💖");
+      } else {
+        showToast("Interesse enviado! Se for recíproco, o Instagram será liberado.", "🎉");
+      }
     } catch (err) {
-      showToast(err instanceof ApiError ? err.message : "Não foi possível enviar o interesse.", "⚠️");
+      showToast(getCrushErrorMessage(err, "Não foi possível enviar o interesse."), "⚠️");
     } finally {
       setMatchingCrushId(null);
     }
   }
 
-  // Ação: Aceitar Match
-  async function handleAcceptMatch(match: MatchResponse) {
-    if (!token) return;
-    const crushId = match.crush?.id || match.likedCrush?.id;
-    if (!crushId) return;
-
-    setProcessingMatchId(match.id);
-    try {
-      await api.acceptMatch(token, crushId, match.id);
-      setReceivedMatches((prev) =>
-        prev.map((item) => (item.id === match.id ? { ...item, status: "ACCEPTED" } : item))
-      );
-      showToast("DEU MATCH! Vocês demonstraram interesse mútuo! 🎉", "💖");
-    } catch (err) {
-      showToast(err instanceof ApiError ? err.message : "Não foi possível aceitar o match.", "⚠️");
-    } finally {
-      setProcessingMatchId(null);
-    }
+  function handleDiscardCrush(crushId: string) {
+    setDiscardedCrushIds((prev) => new Set([...prev, crushId]));
+    setDeckIndex((prev) => prev + 1);
   }
 
-  // Ação: Recusar Match
-  async function handleRejectMatch(match: MatchResponse) {
-    if (!token) return;
-    const crushId = match.crush?.id || match.likedCrush?.id;
-    if (!crushId) return;
-
-    setProcessingMatchId(match.id);
-    try {
-      await api.rejectMatch(token, crushId, match.id);
-      setReceivedMatches((prev) =>
-        prev.map((item) => (item.id === match.id ? { ...item, status: "REJECTED" } : item))
-      );
-      showToast("Pedido recusado.", "✕");
-    } catch (err) {
-      showToast(err instanceof ApiError ? err.message : "Não foi possível recusar o match.", "⚠️");
-    } finally {
-      setProcessingMatchId(null);
-    }
-  }
 
   // Ação: Criar Perfil de Crush
   async function handleCreateCrush(e: FormEvent<HTMLFormElement>) {
@@ -385,37 +319,137 @@ export default function CrushesPage() {
     try {
       const newCrush = await api.createCrush(token, payload);
       setCrushes((prev) => [newCrush, ...prev]);
+      setMyCrushId(newCrush.id);
+      setMyCrushPhotoUrl(newCrush.photoUrl);
+      setAccessState("ready");
       resetModalForm();
       setIsModalOpen(false);
       showToast("Seu perfil de Crush foi publicado na vitrine da UERJ!", "✨");
     } catch (err) {
-      setModalError(err instanceof ApiError ? err.message : "Não foi possível criar o perfil de crush.");
+      setModalError(getCrushErrorMessage(err, "Não foi possível publicar seu perfil. Confira os dados e tente novamente."));
     } finally {
       setIsSubmittingCrush(false);
     }
   }
 
+  async function handleDeleteCrush() {
+    if (!token || !myCrushId || isDeletingCrush) return;
+    if (!window.confirm("Apagar seu perfil de Crush e sua foto permanentemente?")) return;
+
+    setIsDeletingCrush(true);
+    try {
+      await api.deleteCrush(token, myCrushId);
+      if (myCrushPhotoUrl) {
+        const blobResponse = await fetch("/api/upload", {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ url: myCrushPhotoUrl }),
+        });
+        if (!blobResponse.ok) {
+          throw new Error("O perfil foi apagado, mas não foi possível remover a foto do Blob.");
+        }
+      }
+      setMyCrushId(null);
+      setMyCrushPhotoUrl(null);
+      setCrushes([]);
+      setAccessState("no-crush");
+      showToast("Perfil e foto apagados.", "🗑️");
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Não foi possível apagar seu perfil.", "⚠️");
+    } finally {
+      setIsDeletingCrush(false);
+    }
+  }
+
   // Filtros aplicados
-  const filteredCrushes = crushes.filter((crush) => {
-    if (selectedCourse !== "Todos" && crush.courseName !== selectedCourse) {
-      return false;
-    }
-    if (selectedGender !== "Todos" && crush.gender !== selectedGender) {
-      return false;
-    }
-    if (selectedOrientation !== "Todos" && crush.orientation !== selectedOrientation) {
-      return false;
-    }
-    if (query.trim()) {
-      const q = query.toLowerCase();
-      const matchCourse = crush.courseName.toLowerCase().includes(q);
-      const matchDesc = crush.description.toLowerCase().includes(q);
-      if (!matchCourse && !matchDesc) return false;
-    }
-    return true;
-  });
+  const deckCrushes = crushes.filter((crush) => crush.id !== myCrushId && !discardedCrushIds.has(crush.id));
+  const activeCrush = deckCrushes[deckIndex];
 
   const pendingReceivedCount = receivedMatches.filter((m) => m.status === "PENDING").length;
+
+  if (accessState !== "ready") {
+    const isUnauthenticated = accessState === "unauthenticated";
+    return (
+      <div className="site-shell">
+        <SiteHeader active="crushes" authenticated={Boolean(token)} />
+        <main className="pink-page inner-page">
+          <div className="crush-access-card">
+            <div className="crush-access-icon">{isUnauthenticated ? "🔒" : "💘"}</div>
+            <h1>{accessState === "loading" ? "Abrindo a área de Crushes..." : isUnauthenticated ? "Entre para acessar os Crushes" : "Crie seu perfil de Crush primeiro"}</h1>
+            <p>
+              {accessState === "loading"
+                ? "Só um instante..."
+                : isUnauthenticated
+                ? "A galeria é exclusiva para estudantes logados que também têm um perfil de Crush."
+                : "Para ver perfis e enviar curtidas, você precisa publicar seu próprio perfil de Crush."}
+            </p>
+            {isUnauthenticated ? (
+              <Link className="create-crush-btn" href="/login">
+                ENTRAR AGORA
+              </Link>
+            ) : accessState === "no-crush" ? (
+              <form className="crush-inline-form" onSubmit={handleCreateCrush}>
+                {modalError && <p className="form-error" role="alert">{modalError}</p>}
+                <label className="crush-file-field">
+                  Foto do perfil
+                  <input
+                    type="file"
+                    accept="image/*"
+                    disabled={isUploadingPhoto}
+                    onChange={(event) => {
+                      const file = event.target.files?.[0];
+                      if (file) void uploadToVercelBlob(file);
+                    }}
+                  />
+                </label>
+                <label>
+                  Seu curso na UERJ
+                  <select name="courseName" defaultValue="" required>
+                    <option value="" disabled>Selecione seu curso...</option>
+                    {Object.entries(UERJ_COURSES_BY_AREA).map(([area, courseList]) => (
+                      <optgroup key={area} label={`Área: ${area}`}>
+                        {courseList.map((course) => <option key={course} value={course}>{course}</option>)}
+                      </optgroup>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  Uma descrição sobre você
+                  <textarea name="description" placeholder="Ex: Sempre no pilotis depois da aula..." required />
+                </label>
+                <div className="crush-inline-form-row">
+                  <label>
+                    Gênero
+                    <select name="gender" defaultValue="OTHER">
+                      <option value="FEMALE">Feminino</option>
+                      <option value="MALE">Masculino</option>
+                      <option value="TRANSGENDER">Transgênero</option>
+                      <option value="NON_BINARY">Não-binário</option>
+                      <option value="OTHER">Outro</option>
+                    </select>
+                  </label>
+                  <label>
+                    Orientação
+                    <select name="orientation" defaultValue="BISEXUAL">
+                      <option value="HETEROSEXUAL">Heterossexual</option>
+                      <option value="HOMOSEXUAL">Homossexual</option>
+                      <option value="BISEXUAL">Bissexual</option>
+                      <option value="ASEXUAL">Assexual</option>
+                      <option value="PANSEXUAL">Pansexual</option>
+                    </select>
+                  </label>
+                </div>
+                <button type="submit" className="create-crush-btn" disabled={isSubmittingCrush || isUploadingPhoto}>
+                  {isUploadingPhoto ? "ENVIANDO FOTO..." : isSubmittingCrush ? "PUBLICANDO..." : "PUBLICAR MEU PERFIL"}
+                </button>
+              </form>
+            ) : null}
+          </div>
+        </main>
+        <SiteFooter />
+      </div>
+    );
+  }
 
   return (
     <div className="site-shell">
@@ -433,7 +467,7 @@ export default function CrushesPage() {
             </span>
           </div>
 
-          {/* Barra de Ações Superiores & Abas */}
+          {/* Navegação entre galeria e matches recebidos */}
           <div className="crushes-header-bar">
             <div className="crushes-tabs" role="tablist">
               <button
@@ -462,168 +496,45 @@ export default function CrushesPage() {
                 )}
               </button>
 
-              <button
-                type="button"
-                role="tab"
-                aria-selected={activeTab === "sent"}
-                className={`crush-tab-btn tab-sent ${activeTab === "sent" ? "active" : ""}`}
-                onClick={() => setActiveTab("sent")}
-              >
-                <span>🚀 Pedidos Enviados</span>
-                <span className="tab-counter">{sentMatches.length}</span>
-              </button>
             </div>
-
             <button
               type="button"
-              className="create-crush-btn"
-              onClick={() => {
-                if (!token) {
-                  showToast("Faça login para cadastrar seu perfil de crush!", "🔒");
-                } else {
-                  setIsModalOpen(true);
-                }
-              }}
+              className="delete-crush-btn"
+              onClick={() => void handleDeleteCrush()}
+              disabled={isDeletingCrush}
             >
-              ✨ Cadastrar Meu Perfil
+              {isDeletingCrush ? "APAGANDO..." : "🗑️ APAGAR MEU PERFIL"}
             </button>
           </div>
 
-          {/* Aviso de Login se Desconectado */}
-          {!token && (
-            <div className="login-notice" style={{ marginBottom: "28px" }}>
-              <div>
-                <strong style={{ fontSize: "16px", display: "block", marginBottom: "4px" }}>
-                  Quer demonstrar interesse ou receber matches?
-                </strong>
-                <p style={{ margin: 0, fontSize: "13px" }}>
-                  Entre com seu email institucional da UERJ para enviar pedidos e descobrir quem curtiu você.
-                </p>
-              </div>
-              <Link className="black-button" href="/login" style={{ whiteSpace: "nowrap" }}>
-                ENTRAR AGORA
-              </Link>
-            </div>
-          )}
-
           {/* ABA 1: GALERIA DE CRUSHES */}
           {activeTab === "gallery" && (
-            <div>
-              {/* Filtros e Busca */}
-              <div className="crushes-filter-card">
-                <div className="crushes-search-row">
-                  <input
-                    type="text"
-                    className="crushes-search-input"
-                    placeholder="🔍 Buscar por descrição, características ou curso..."
-                    value={query}
-                    onChange={(e) => setQuery(e.target.value)}
-                  />
-                  {query && (
-                    <button
-                      type="button"
-                      onClick={() => setQuery("")}
-                      style={{ background: "#eee", border: "3px solid var(--ink)", padding: "0 14px", fontWeight: 800, cursor: "pointer" }}
-                    >
-                      Limpar
-                    </button>
-                  )}
-                </div>
-
-                <div className="crushes-selects-grid">
-                  <label>
-                    Filtrar por Curso
-                    <select value={selectedCourse} onChange={(e) => setSelectedCourse(e.target.value)}>
-                      <option value="Todos">Todos os cursos ({Object.values(UERJ_COURSES_BY_AREA).flat().length} cursos)</option>
-                      {Object.entries(UERJ_COURSES_BY_AREA).map(([area, courseList]) => (
-                        <optgroup key={area} label={`Área: ${area}`}>
-                          {courseList.map((course) => (
-                            <option key={course} value={course}>
-                              {course}
-                            </option>
-                          ))}
-                        </optgroup>
-                      ))}
-                      {courses.filter((c) => !ALL_UERJ_COURSES.includes(c.name)).length > 0 && (
-                        <optgroup label="Outros Cursos Cadastrados">
-                          {courses
-                            .filter((c) => !ALL_UERJ_COURSES.includes(c.name))
-                            .map((c) => (
-                              <option key={c.id} value={c.name}>
-                                {c.name}
-                              </option>
-                            ))}
-                        </optgroup>
-                      )}
-                    </select>
-                  </label>
-
-                  <label>
-                    Filtrar por Gênero
-                    <select value={selectedGender} onChange={(e) => setSelectedGender(e.target.value)}>
-                      <option value="Todos">Todos os gêneros</option>
-                      <option value="FEMALE">Feminino</option>
-                      <option value="MALE">Masculino</option>
-                      <option value="TRANSGENDER">Transgênero</option>
-                      <option value="NON_BINARY">Não-binário</option>
-                      <option value="OTHER">Outro</option>
-                    </select>
-                  </label>
-
-                  <label>
-                    Orientação
-                    <select value={selectedOrientation} onChange={(e) => setSelectedOrientation(e.target.value)}>
-                      <option value="Todos">Todas as orientações</option>
-                      <option value="HETEROSEXUAL">Heterossexual</option>
-                      <option value="HOMOSEXUAL">Homossexual</option>
-                      <option value="BISEXUAL">Bissexual</option>
-                      <option value="ASEXUAL">Assexual</option>
-                      <option value="PANSEXUAL">Pansexual</option>
-                    </select>
-                  </label>
-                </div>
-              </div>
-
-              {/* Grid de Cards de Crush */}
+            <div className="crush-deck-area">
               {isLoadingCrushes ? (
                 <div style={{ background: "#fff", border: "4px solid var(--ink)", padding: "40px", textAlign: "center" }}>
                   <div className="loading-spinner" style={{ margin: "0 auto 16px" }} />
                   <p style={{ fontWeight: 800, margin: 0 }}>Carregando os crushes da UERJ...</p>
                 </div>
-              ) : filteredCrushes.length === 0 ? (
-                <div style={{ background: "#fff", border: "4px solid var(--ink)", padding: "50px 20px", textAlign: "center" }}>
-                  <div style={{ fontSize: "48px", marginBottom: "12px" }}>💔</div>
-                  <h3 style={{ fontSize: "20px", fontWeight: 900, margin: "0 0 6px" }}>Nenhum crush encontrado</h3>
-                  <p style={{ color: "#666", fontSize: "13px", margin: "0 0 18px" }}>
-                    Tente ajustar os filtros ou seja o primeiro a cadastrar seu perfil de crush!
+              ) : crushError ? (
+                <div style={{ background: "#fff", border: "4px solid var(--ink)", padding: "40px 24px", textAlign: "center", boxShadow: "4px 4px 0 var(--ink)" }}>
+                  <div style={{ fontSize: "40px", marginBottom: "12px" }}>⚠️</div>
+                  <h3 style={{ fontSize: "20px", fontWeight: 900, margin: "0 0 6px" }}>Erro ao carregar crushes</h3>
+                  <p style={{ color: "#666", fontSize: "14px", margin: "0 0 16px" }}>
+                    {crushError}
                   </p>
-                  <button
-                    type="button"
-                    className="create-crush-btn"
-                    onClick={() => {
-                      setSelectedCourse("Todos");
-                      setSelectedGender("Todos");
-                      setSelectedOrientation("Todos");
-                      setQuery("");
-                    }}
-                  >
-                    Resetar Filtros
+                  <button type="button" className="create-crush-btn" onClick={() => reloadCrushes()}>
+                    Tentar Novamente
                   </button>
                 </div>
-              ) : (
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: "20px" }}>
-                  {filteredCrushes.map((crush) => {
-                    const isLiked = sentCrushIds.has(crush.id);
-                    const isProcessing = matchingCrushId === crush.id;
-
-                    return (
-                      <div key={crush.id} className="crush-card-modern">
+              ) : activeCrush ? (
+                <div className="crush-deck">
+                      <div className="crush-card-modern tinder-card">
                         <div className="crush-card-photo-wrap">
-                          {crush.photoUrl ? (
+                          {activeCrush.photoUrl ? (
                             /* eslint-disable-next-line @next/next/no-img-element */
                             <img
-                              src={crush.photoUrl}
-                              alt={`Crush de ${crush.courseName}`}
+                              src={getPrivatePhotoUrl(activeCrush.photoUrl)}
+                              alt={`Crush de ${activeCrush.courseName}`}
                               className="crush-card-img"
                               onError={(e) => {
                                 // Fallback visual limpo se imagem quebrar
@@ -632,48 +543,61 @@ export default function CrushesPage() {
                             />
                           ) : (
                             <div className="crush-card-avatar-fallback" style={{ background: "var(--yellow)" }}>
-                              {crush.courseName.charAt(0).toUpperCase()}
+                              {activeCrush.courseName.charAt(0).toUpperCase()}
                             </div>
                           )}
                           <span className="crush-card-course-badge">
-                            {crush.courseName}
+                            {activeCrush.courseName}
                           </span>
                         </div>
 
                         <div className="crush-card-body">
                           <div className="crush-card-tags">
-                            {crush.gender && (
+                            {activeCrush.gender && (
                               <span className="crush-tag gender">
-                                {genderLabels[crush.gender] || crush.gender}
+                                {genderLabels[activeCrush.gender] || activeCrush.gender}
                               </span>
                             )}
-                            {crush.orientation && (
+                            {activeCrush.orientation && (
                               <span className="crush-tag orientation">
-                                {orientationLabels[crush.orientation] || crush.orientation}
+                                {orientationLabels[activeCrush.orientation] || activeCrush.orientation}
                               </span>
                             )}
                           </div>
 
                           <p className="crush-card-desc">
-                            &ldquo;{crush.description}&rdquo;
+                            &ldquo;{activeCrush.description}&rdquo;
                           </p>
 
-                          <button
-                            type="button"
-                            className={`crush-card-btn ${isLiked ? "liked" : ""}`}
-                            disabled={isLiked || isProcessing}
-                            onClick={() => handleSendMatch(crush)}
-                          >
-                            {isProcessing
-                              ? "ENVIANDO..."
-                              : isLiked
-                              ? "✓ INTERESSE ENVIADO"
-                              : "♡ DEMONSTRAR INTERESSE"}
-                          </button>
+                          <p className="crush-instagram-note">
+                            📸 O username exibido aqui é o @ do Instagram. Ele só fica disponível depois do match.
+                          </p>
+
+                          <div className="crush-deck-actions">
+                            <button type="button" className="crush-discard-btn" onClick={() => handleDiscardCrush(activeCrush.id)} aria-label="Descartar perfil">
+                              ✕ <span>DESCARTAR</span>
+                            </button>
+                            <button type="button" className="crush-like-btn" disabled={matchingCrushId === activeCrush.id} onClick={() => handleSendMatch(activeCrush)} aria-label="Curtir perfil">
+                              {matchingCrushId === activeCrush.id ? "..." : "♥"} <span>CURTIR</span>
+                            </button>
+                          </div>
                         </div>
                       </div>
-                    );
-                  })}
+                </div>
+              ) : (
+                <div className="crush-empty-state">
+                  <div>✨</div>
+                  <h3>Você viu tudo por enquanto!</h3>
+                  <p>Novos perfis podem aparecer a qualquer momento. Volte depois para continuar a descobrir.</p>
+                </div>
+              )}
+              {revealedInstagram && (
+                <div className="crush-instagram-reveal">
+                  <span>💖 MATCH CONFIRMADO</span>
+                  <strong>O Instagram foi liberado:</strong>
+                  <a href={`https://instagram.com/${encodeURIComponent(revealedInstagram)}`} target="_blank" rel="noreferrer">
+                    @{revealedInstagram} ↗
+                  </a>
                 </div>
               )}
             </div>
@@ -682,202 +606,21 @@ export default function CrushesPage() {
           {/* ABA 2: MATCHES RECEBIDOS */}
           {activeTab === "received" && (
             <div className="matches-list">
-              {!token ? (
-                <div style={{ background: "#fff", border: "4px solid var(--ink)", padding: "40px", textAlign: "center" }}>
-                  <div style={{ fontSize: "40px", marginBottom: "10px" }}>🔒</div>
-                  <h3 style={{ fontSize: "20px", fontWeight: 900, margin: "0 0 8px" }}>Conecte-se para ver seus matches</h3>
-                  <p style={{ color: "#666", fontSize: "13px", marginBottom: "16px" }}>
-                    Você precisa estar conectado com sua conta institucional para visualizar quem demonstrou interesse em você.
-                  </p>
-                  <Link className="pink-button" href="/login" style={{ display: "inline-block", maxWidth: "200px" }}>
-                    FAZER LOGIN
-                  </Link>
+              <div className="received-matches-teaser">
+                <div className="received-matches-blur" aria-hidden="true">
+                  {receivedMatches.length > 0 ? receivedMatches.slice(0, 3).map((match) => (
+                    <div key={match.id} className="received-match-silhouette">💘 &nbsp; alguém curtiu seu perfil</div>
+                  )) : <div className="received-match-silhouette">💘 &nbsp; alguém pode estar te esperando</div>}
                 </div>
-              ) : isLoadingMatches ? (
-                <div style={{ background: "#fff", border: "4px solid var(--ink)", padding: "40px", textAlign: "center" }}>
-                  <div className="loading-spinner" style={{ margin: "0 auto 16px" }} />
-                  <p style={{ fontWeight: 800, margin: 0 }}>Buscando pedidos recebidos...</p>
+                <div className="received-matches-overlay">
+                  <span>👀</span>
+                  <strong>Tem gente curiosa sobre você...</strong>
+                  <small>Continue curtindo para descobrir quem deu match.</small>
                 </div>
-              ) : receivedMatches.length === 0 ? (
-                <div style={{ background: "#fff", border: "4px solid var(--ink)", padding: "48px 20px", textAlign: "center" }}>
-                  <div style={{ fontSize: "44px", marginBottom: "12px" }}>📬</div>
-                  <h3 style={{ fontSize: "20px", fontWeight: 900, margin: "0 0 6px" }}>Nenhum pedido de match recebido ainda</h3>
-                  <p style={{ color: "#666", fontSize: "13px", maxWidth: "420px", margin: "0 auto 16px" }}>
-                    Cadastre ou compartilhe seu perfil de crush para que outros alunos da UERJ encontrem você!
-                  </p>
-                  <button type="button" className="create-crush-btn" onClick={() => setIsModalOpen(true)}>
-                    Cadastrar Meu Perfil
-                  </button>
-                </div>
-              ) : (
-                receivedMatches.map((match) => {
-                  const matchCrush = match.crush || match.likedCrush;
-                  const matchCourse = getCrushCourseName(matchCrush);
-                  const isProcessing = processingMatchId === match.id;
-                  const isAccepted = match.status === "ACCEPTED";
-                  const isRejected = match.status === "REJECTED";
-
-                  return (
-                    <div key={match.id} className={`match-item-card ${isAccepted ? "accepted" : ""}`}>
-                      <div className="match-info-group">
-                        <div className="match-avatar-mini">
-                          {matchCrush?.photoUrl ? (
-                            /* eslint-disable-next-line @next/next/no-img-element */
-                            <img src={matchCrush.photoUrl} alt="Foto do crush" />
-                          ) : (
-                            <span>{matchCourse.charAt(0) || "💘"}</span>
-                          )}
-                        </div>
-
-                        <div className="match-details">
-                          <h4>
-                            {matchCourse}
-                          </h4>
-                          {matchCrush?.description && (
-                            <p>&ldquo;{matchCrush.description}&rdquo;</p>
-                          )}
-                          <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
-                            <span
-                              className={`match-status-badge ${
-                                isAccepted ? "accepted" : isRejected ? "rejected" : "pending"
-                              }`}
-                            >
-                              {isAccepted
-                                ? "🎉 DEU MATCH!"
-                                : isRejected
-                                ? "RECUSADO"
-                                : "AGUARDANDO SUA RESPOSTA"}
-                            </span>
-                            {match.createdAt && (
-                              <span style={{ fontSize: "11px", color: "#666" }}>
-                                {new Date(match.createdAt).toLocaleDateString("pt-BR")}
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="match-actions-group">
-                        {match.status === "PENDING" && (
-                          <>
-                            <button
-                              type="button"
-                              className="btn-accept-match"
-                              disabled={isProcessing}
-                              onClick={() => handleAcceptMatch(match)}
-                            >
-                              {isProcessing ? "SALVANDO..." : "✓ ACEITAR MATCH"}
-                            </button>
-                            <button
-                              type="button"
-                              className="btn-reject-match"
-                              disabled={isProcessing}
-                              onClick={() => handleRejectMatch(match)}
-                            >
-                              ✕ RECUSAR
-                            </button>
-                          </>
-                        )}
-                        {isAccepted && (
-                          <span style={{ fontSize: "12px", fontWeight: 900, color: "#009955" }}>
-                            Vocês deram match! 💖
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })
-              )}
+              </div>
             </div>
           )}
 
-          {/* ABA 3: PEDIDOS ENVIADOS */}
-          {activeTab === "sent" && (
-            <div className="matches-list">
-              {!token ? (
-                <div style={{ background: "#fff", border: "4px solid var(--ink)", padding: "40px", textAlign: "center" }}>
-                  <div style={{ fontSize: "40px", marginBottom: "10px" }}>🔒</div>
-                  <h3 style={{ fontSize: "20px", fontWeight: 900, margin: "0 0 8px" }}>Conecte-se para ver seus envios</h3>
-                  <Link className="pink-button" href="/login" style={{ display: "inline-block", maxWidth: "200px" }}>
-                    FAZER LOGIN
-                  </Link>
-                </div>
-              ) : isLoadingMatches ? (
-                <div style={{ background: "#fff", border: "4px solid var(--ink)", padding: "40px", textAlign: "center" }}>
-                  <div className="loading-spinner" style={{ margin: "0 auto 16px" }} />
-                  <p style={{ fontWeight: 800, margin: 0 }}>Buscando pedidos enviados...</p>
-                </div>
-              ) : sentMatches.length === 0 ? (
-                <div style={{ background: "#fff", border: "4px solid var(--ink)", padding: "48px 20px", textAlign: "center" }}>
-                  <div style={{ fontSize: "44px", marginBottom: "12px" }}>🚀</div>
-                  <h3 style={{ fontSize: "20px", fontWeight: 900, margin: "0 0 6px" }}>Nenhum pedido enviado ainda</h3>
-                  <p style={{ color: "#666", fontSize: "13px", margin: "0 0 16px" }}>
-                    Explore a galeria e clique em &ldquo;Demonstrar Interesse&rdquo; quando encontrar alguém interessante!
-                  </p>
-                  <button type="button" className="crush-tab-btn active" onClick={() => setActiveTab("gallery")}>
-                    Ir para a Galeria de Crushes
-                  </button>
-                </div>
-              ) : (
-                sentMatches.map((match) => {
-                  const targetCrush = match.likedCrush || match.crush;
-                  const targetCourse = getCrushCourseName(targetCrush);
-                  const isAccepted = match.status === "ACCEPTED";
-                  const isRejected = match.status === "REJECTED";
-
-                  return (
-                    <div key={match.id} className={`match-item-card ${isAccepted ? "accepted" : ""}`}>
-                      <div className="match-info-group">
-                        <div className="match-avatar-mini" style={{ background: "var(--yellow)" }}>
-                          {targetCrush?.photoUrl ? (
-                            /* eslint-disable-next-line @next/next/no-img-element */
-                            <img src={targetCrush.photoUrl} alt="Foto do crush" />
-                          ) : (
-                            <span>{targetCourse.charAt(0) || "💘"}</span>
-                          )}
-                        </div>
-
-                        <div className="match-details">
-                          <h4>
-                            Crush de {targetCourse}
-                          </h4>
-                          {targetCrush?.description && (
-                            <p>&ldquo;{targetCrush.description}&rdquo;</p>
-                          )}
-                          <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
-                            <span
-                              className={`match-status-badge ${
-                                isAccepted ? "accepted" : isRejected ? "rejected" : "pending"
-                              }`}
-                            >
-                              {isAccepted
-                                ? "💖 MATCH CONFIRMADO!"
-                                : isRejected
-                                ? "NÃO FOI DESSA VEZ"
-                                : "AGUARDANDO RESPOSTA ⏳"}
-                            </span>
-                            {match.createdAt && (
-                              <span style={{ fontSize: "11px", color: "#666" }}>
-                                {new Date(match.createdAt).toLocaleDateString("pt-BR")}
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-
-                      <div>
-                        {isAccepted && (
-                          <span style={{ background: "#00d084", color: "#fff", border: "2px solid var(--ink)", padding: "6px 10px", fontSize: "11px", fontWeight: 900 }}>
-                            DEU MATCH! 🎉
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })
-              )}
-            </div>
-          )}
         </div>
       </main>
 
@@ -921,25 +664,7 @@ export default function CrushesPage() {
               <div className="crush-photo-uploader-section">
                 <label style={{ marginBottom: "6px" }}>Foto do Perfil *</label>
                 
-                <div className="crush-photo-mode-toggle">
-                  <button
-                    type="button"
-                    className={inputMode === "upload" ? "active" : ""}
-                    onClick={() => setInputMode("upload")}
-                  >
-                    ☁️ Upload (@vercel/blob)
-                  </button>
-                  <button
-                    type="button"
-                    className={inputMode === "url" ? "active" : ""}
-                    onClick={() => setInputMode("url")}
-                  >
-                    🔗 Link da Imagem
-                  </button>
-                </div>
-
-                {inputMode === "upload" ? (
-                  <div
+                <div
                     className={`crush-dropzone ${isDragOver ? "drag-over" : ""} ${photoPreview ? "has-file" : ""}`}
                     onDragOver={(e) => {
                       e.preventDefault();
@@ -1005,22 +730,7 @@ export default function CrushesPage() {
                         </span>
                       </label>
                     )}
-                  </div>
-                ) : (
-                  <div>
-                    <input
-                      name="photoUrl"
-                      type="url"
-                      placeholder="https://exemplo.com/sua-foto.jpg"
-                      value={photoUrl}
-                      onChange={(e) => {
-                        setPhotoUrl(e.target.value);
-                        setPhotoPreview(e.target.value || null);
-                      }}
-                      required={!photoUrl}
-                    />
-                  </div>
-                )}
+                </div>
                 <input type="hidden" name="photoUrl" value={photoUrl} />
               </div>
 

@@ -236,6 +236,7 @@ function formatPostDate(dateStr: string) {
   try {
     const d = new Date(dateStr);
     if (isNaN(d.getTime())) return dateStr;
+    d.setHours(d.getHours() - 3);
     return d.toLocaleDateString("pt-BR", {
       day: "2-digit",
       month: "2-digit",

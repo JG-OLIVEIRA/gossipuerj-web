@@ -7,11 +7,28 @@ import { api, ApiError, UserResponse } from "../../lib/api";
 import SiteFooter from "../components/site-footer";
 import SiteHeader from "../components/site-header";
 
+function getFriendlyError(error: unknown, fallback: string): string {
+  if (!(error instanceof ApiError)) return fallback;
+  const message = error.message.toLowerCase();
+
+  if (error.status === 401 || message.includes("senha") || message.includes("credencial")) {
+    return "Email ou senha incorretos. Confira os dados e tente novamente.";
+  }
+  if (error.status === 404) return "Não encontramos uma conta com esse email.";
+  if (error.status === 409) return "Esse email já está cadastrado. Tente entrar na sua conta.";
+  if (error.status >= 500) return "O servidor está indisponível no momento. Tente novamente em instantes.";
+  if (message.includes("código") || message.includes("verification")) {
+    return "Esse código não é válido ou já expirou. Solicite um novo código.";
+  }
+  return fallback;
+}
+
 export default function LoginPage() {
   const router = useRouter();
-  const [mode, setMode] = useState<"login" | "register">("login");
+  const [mode, setMode] = useState<"login" | "register" | "forgot">("login");
   const [verificationEmail, setVerificationEmail] = useState("");
   const [needsVerification, setNeedsVerification] = useState(false);
+  const [passwordResetRequested, setPasswordResetRequested] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [authenticated, setAuthenticated] = useState<boolean | null>(null);
@@ -67,6 +84,14 @@ export default function LoginPage() {
     const email = String(form.get("email") ?? "");
 
     try {
+      if (mode === "forgot") {
+        await api.forgetPassword(email);
+          setVerificationEmail(email);
+        setPasswordResetRequested(true);
+        setMessage("Confira seu email para obter o código de recuperação.");
+        return;
+      }
+
       if (mode === "login") {
         const response = await api.login(email, String(form.get("password") ?? ""));
         localStorage.setItem("gossipuerj_token", response.token);
@@ -92,10 +117,34 @@ export default function LoginPage() {
       setMessage("Conta criada. Confira seu email para obter o código de verificação.");
     } catch (requestError) {
       if (requestError instanceof ApiError && requestError.message.toLowerCase().includes("não foi encontrado")) {
-        setError("Não encontramos uma conta com esse email. Clique em CRIAR AGORA para criar seu perfil.");
+        setError("Não encontramos uma conta com esse email. Você pode criar uma conta agora.");
       } else {
-        setError(requestError instanceof ApiError ? requestError.message : "Não foi possível concluir a solicitação.");
+        setError(getFriendlyError(requestError, "Não foi possível concluir a solicitação."));
       }
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  async function handlePasswordReset(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (isSubmitting) return;
+    setIsSubmitting(true);
+    setMessage("");
+    setError("");
+    const form = new FormData(event.currentTarget);
+
+    try {
+      await api.resetPassword({
+        email: verificationEmail,
+        verificationCode: String(form.get("verificationCode") ?? ""),
+        password: String(form.get("newPassword") ?? ""),
+      });
+      setPasswordResetRequested(false);
+      setMode("login");
+      setMessage("Senha redefinida. Você já pode entrar com a nova senha.");
+    } catch (requestError) {
+      setError(getFriendlyError(requestError, "Não foi possível redefinir sua senha."));
     } finally {
       setIsSubmitting(false);
     }
@@ -115,7 +164,7 @@ export default function LoginPage() {
       setMode("login");
       setMessage("Email verificado. Você já pode entrar.");
     } catch (requestError) {
-      setError(requestError instanceof ApiError ? requestError.message : "Não foi possível verificar seu email.");
+      setError(getFriendlyError(requestError, "Não foi possível verificar seu email."));
     } finally {
       setIsSubmitting(false);
     }
@@ -131,7 +180,7 @@ export default function LoginPage() {
       await api.resendVerification(verificationEmail);
       setMessage("Um novo código foi enviado para seu email.");
     } catch (requestError) {
-      setError(requestError instanceof ApiError ? requestError.message : "Não foi possível reenviar o código.");
+      setError(getFriendlyError(requestError, "Não foi possível reenviar o código."));
     } finally {
       setIsSubmitting(false);
     }
@@ -146,9 +195,10 @@ export default function LoginPage() {
   }
 
   function handleRequiredFieldInvalid(event: FormEvent<HTMLInputElement | HTMLSelectElement>) {
-    if (event.currentTarget.validity.valueMissing) {
-      event.currentTarget.setCustomValidity("Preencha este campo para continuar.");
-    }
+    const field = event.currentTarget;
+    if (field.validity.valueMissing) field.setCustomValidity("Preencha este campo para continuar.");
+    else if (field.validity.typeMismatch) field.setCustomValidity("Digite um email válido, como voce@uerj.br.");
+    else if (field.validity.tooShort) field.setCustomValidity("Use pelo menos 6 caracteres.");
   }
 
   function clearFieldValidity(event: FormEvent<HTMLInputElement | HTMLSelectElement>) {
@@ -201,18 +251,38 @@ export default function LoginPage() {
     <div className="site-shell">
       <SiteHeader active="login" />
       <section className="pink-page login-page">
-        <form className="login-card" onSubmit={needsVerification ? handleVerification : handleSubmit}>
+        <form className="login-card" onSubmit={needsVerification ? handleVerification : passwordResetRequested ? handlePasswordReset : handleSubmit}>
           <div className="login-logo">GOSSIP<span>UERJ</span></div>
-          <h1>{needsVerification ? "Verifique seu email" : mode === "login" ? "Bem-vindo de volta" : "Crie sua conta"}</h1>
-          <p>{needsVerification ? `Digite o código enviado para ${verificationEmail}.` : mode === "login" ? "Entre com sua conta para participar do Gossip UERJ." : "Crie seu perfil para interagir com a comunidade UERJ."}</p>
+          <h1>{needsVerification ? "Verifique seu email" : passwordResetRequested ? "Redefina sua senha" : mode === "forgot" ? "Recupere sua senha" : mode === "login" ? "Bem-vindo de volta" : "Crie sua conta"}</h1>
+          <p>{needsVerification ? `Digite o código enviado para ${verificationEmail}.` : passwordResetRequested ? "Digite o código recebido e escolha uma nova senha." : mode === "forgot" ? "Enviaremos um código para você criar uma nova senha." : mode === "login" ? "Entre com sua conta para participar do Gossip UERJ." : "Crie seu perfil para interagir com a comunidade UERJ."}</p>
           {needsVerification ? (
             <label>Código de verificação<input name="verificationCode" inputMode="numeric" required onInvalid={handleRequiredFieldInvalid} onInput={clearFieldValidity} /></label>
+          ) : passwordResetRequested ? (
+            <>
+              <label>Código de recuperação<input name="verificationCode" inputMode="numeric" required onInvalid={handleRequiredFieldInvalid} onInput={clearFieldValidity} /></label>
+              <label>Nova senha<input name="newPassword" type="password" minLength={6} required onInvalid={handleRequiredFieldInvalid} onInput={clearFieldValidity} /></label>
+            </>
+          ) : mode === "forgot" ? (
+            <label>
+              Email institucional
+              <input
+                name="email"
+                type="email"
+                placeholder="voce@graduacao.uerj.br"
+                required
+                onInvalid={handleRequiredFieldInvalid}
+                onInput={clearFieldValidity}
+              />
+            </label>
           ) : (
             <>
               {mode === "register" && (
                 <label>
-                  Nome de usuário (@)
-                  <input name="username" type="text" placeholder="ex: jorgeuerj (opcional)" onInput={clearFieldValidity} />
+                  Seu @ do Instagram
+                  <input name="username" type="text" placeholder="ex: jorgeuerj (opcional)" aria-describedby="instagram-username-help" onInput={clearFieldValidity} />
+                  <small id="instagram-username-help" className="field-help-text">
+                    Será liberado para a outra pessoa somente depois que vocês derem match.
+                  </small>
                 </label>
               )}
               <label>
@@ -230,23 +300,28 @@ export default function LoginPage() {
               </label>
             </>
           )}
-          {error && <p className="form-error" role="alert">{error}</p>}
-          {message && <p className="form-success" role="status">{message}</p>}
+          {error && <p className="form-error login-feedback" role="alert">{error}</p>}
+          {message && <p className="form-success login-feedback" role="status">{message}</p>}
           <button className="pink-button" type="submit" disabled={isSubmitting}>
-            {isSubmitting ? (needsVerification ? "VERIFICANDO..." : mode === "login" ? "ENTRANDO..." : "CRIANDO...") : needsVerification ? "VERIFICAR EMAIL" : mode === "login" ? "ENTRAR" : "CRIAR CONTA"}
+            {isSubmitting ? "AGUARDE..." : needsVerification ? "VERIFICAR EMAIL" : passwordResetRequested ? "REDEFINIR SENHA" : mode === "forgot" ? "ENVIAR CÓDIGO" : mode === "login" ? "ENTRAR" : "CRIAR CONTA"}
           </button>
           {needsVerification && (
             <button className="resend-button" type="button" onClick={handleResendVerification} disabled={isSubmitting}>
               {isSubmitting ? "REENVIANDO..." : "REENVIAR CÓDIGO"}
             </button>
           )}
-          {!needsVerification && (
+          {!needsVerification && !passwordResetRequested && (
             <div className="register">
-              {mode === "login" ? "Não tem conta? " : "Já tem conta? "}
+              {mode === "forgot" ? "Lembrou sua senha? " : mode === "login" ? "Não tem conta? " : "Já tem conta? "}
               <button type="button" onClick={() => { setMode(mode === "login" ? "register" : "login"); setMessage(""); setError(""); }}>
-                {mode === "login" ? "CRIAR AGORA" : "VOLTAR AO LOGIN"}
+                {mode === "forgot" || mode === "register" ? "VOLTAR AO LOGIN" : "CRIAR AGORA"}
               </button>
             </div>
+          )}
+          {mode === "login" && !needsVerification && !passwordResetRequested && (
+            <button className="forgot-password-link" type="button" onClick={() => { setMode("forgot"); setMessage(""); setError(""); }}>
+              ESQUECI MINHA SENHA
+            </button>
           )}
           <Link className="back-link" href="/">← Voltar para o feed</Link>
         </form>

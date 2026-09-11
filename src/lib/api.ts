@@ -68,6 +68,11 @@ export type UserResponse = {
   updatedAt?: string;
 };
 
+export type UpdateUserRequest = {
+  username: string;
+  email: string;
+};
+
 export type UserDetail = UserResponse;
 
 export type Course = {
@@ -176,6 +181,16 @@ export type VerifyUserRequest = {
   verificationCode: string;
 };
 
+export type ResetPasswordUserRequest = {
+  email: string;
+  password: string;
+  verificationCode: string;
+};
+
+export type ForgetPasswordRequest = {
+  email: string;
+};
+
 // Crush schemas
 export type Crush = {
   id: string;
@@ -256,15 +271,17 @@ export const api = {
   // ==========================================
   // Post Controller (/api/v1/posts)
   // ==========================================
-  getAll(page = 0, size = 50, sort?: string[]): Promise<PageResponsePostResponse> {
+  getAll(page = 0, size = 50, sort?: string[], token?: string): Promise<PageResponsePostResponse> {
     const sortQuery = sort && sort.length ? `&${sort.map((s) => `sort=${encodeURIComponent(s)}`).join("&")}` : "";
+    const headers: Record<string, string> = {};
+    if (token) headers.Authorization = `Bearer ${token}`;
     return request<PageResponsePostResponse>(
       `/api/v1/posts?page=${page}&size=${size}${sortQuery}`,
-      { method: "GET" }
+      { method: "GET", headers }
     );
   },
-  posts(page = 0, size = 50): Promise<PageResponsePostResponse> {
-    return this.getAll(page, size);
+  posts(page = 0, size = 50, token?: string): Promise<PageResponsePostResponse> {
+    return this.getAll(page, size, undefined, token);
   },
 
   create(token: string, data: PostRequest): Promise<PostResponse> {
@@ -404,15 +421,19 @@ export const api = {
   // ==========================================
   // Crush Controller (/api/v1/crushes)
   // ==========================================
-  getAllCrushes(page = 0, size = 50, sort?: string[]): Promise<PageResponseCrushResponse> {
+  getAllCrushes(page = 0, size = 50, sort?: string[], token?: string): Promise<PageResponseCrushResponse> {
     const sortQuery = sort && sort.length ? `&${sort.map((s) => `sort=${encodeURIComponent(s)}`).join("&")}` : "";
+    const headers: Record<string, string> = {};
+    if (token) {
+      headers.Authorization = `Bearer ${token}`;
+    }
     return request<PageResponseCrushResponse>(
       `/api/v1/crushes?page=${page}&size=${size}${sortQuery}`,
-      { method: "GET" }
+      { method: "GET", headers }
     );
   },
-  crushes(page = 0, size = 50): Promise<PageResponseCrushResponse> {
-    return this.getAllCrushes(page, size);
+  crushes(page = 0, size = 50, sort?: string[], token?: string): Promise<PageResponseCrushResponse> {
+    return this.getAllCrushes(page, size, sort, token);
   },
 
   createCrush(token: string, data: CrushRequest): Promise<CrushResponse> {
@@ -423,9 +444,36 @@ export const api = {
     });
   },
 
-  getCrush(crushId: string): Promise<CrushResponse> {
+  updateCrush(token: string, data: CrushRequest): Promise<CrushResponse> {
+    return request<CrushResponse>("/api/v1/crushes", {
+      method: "PUT",
+      headers: { Authorization: `Bearer ${token}` },
+      body: JSON.stringify(data),
+    });
+  },
+
+  deleteCrush(token: string, crushId: string): Promise<void> {
+    return request<void>(`/api/v1/crushes/${encodeURIComponent(crushId)}`, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${token}` },
+    });
+  },
+
+  getMyCrush(token: string): Promise<CrushResponse> {
+    return request<CrushResponse>("/api/v1/crushes/me", {
+      method: "GET",
+      headers: { Authorization: `Bearer ${token}` },
+    });
+  },
+
+  getCrush(crushId: string, token?: string): Promise<CrushResponse> {
+    const headers: Record<string, string> = {};
+    if (token) {
+      headers.Authorization = `Bearer ${token}`;
+    }
     return request<CrushResponse>(`/api/v1/crushes/${encodeURIComponent(crushId)}`, {
       method: "GET",
+      headers,
     });
   },
 
@@ -487,17 +535,26 @@ export const api = {
   // ==========================================
   // Course Controller (/api/v1/courses)
   // ==========================================
-  getCourses(page = 0, size = 100, sort?: string[]): Promise<PageResponseCourseResponse> {
+  getCourses(page = 0, size = 100, sort?: string[], token?: string): Promise<PageResponseCourseResponse> {
     const sortQuery = sort && sort.length ? `&${sort.map((s) => `sort=${encodeURIComponent(s)}`).join("&")}` : "";
+    const headers: Record<string, string> = {};
+    if (token) {
+      headers.Authorization = `Bearer ${token}`;
+    }
     return request<PageResponseCourseResponse>(
       `/api/v1/courses?page=${page}&size=${size}${sortQuery}`,
-      { method: "GET" }
+      { method: "GET", headers }
     );
   },
 
-  getCourse(courseId: string): Promise<CourseResponse> {
+  getCourse(courseId: string, token?: string): Promise<CourseResponse> {
+    const headers: Record<string, string> = {};
+    if (token) {
+      headers.Authorization = `Bearer ${token}`;
+    }
     return request<CourseResponse>(`/api/v1/courses/${encodeURIComponent(courseId)}`, {
       method: "GET",
+      headers,
     });
   },
 
@@ -547,10 +604,34 @@ export const api = {
     return this.resend(email);
   },
 
+  forgetPassword(emailOrRequest: string | ForgetPasswordRequest): Promise<void> {
+    const body: ForgetPasswordRequest =
+      typeof emailOrRequest === "string" ? { email: emailOrRequest } : emailOrRequest;
+    return request<void>("/api/v1/auth/forget-password", {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+  },
+
+  resetPassword(data: ResetPasswordUserRequest): Promise<void> {
+    return request<void>("/api/v1/auth/reset-password", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  },
+
   me(token: string): Promise<UserResponse> {
     return request<UserResponse>("/api/v1/auth/me", {
       method: "GET",
       headers: { Authorization: `Bearer ${token}` },
+    });
+  },
+
+  updateUser(token: string, data: UpdateUserRequest): Promise<void> {
+    return request<void>("/api/v1/auth/update", {
+      method: "PUT",
+      headers: { Authorization: `Bearer ${token}` },
+      body: JSON.stringify(data),
     });
   },
 };

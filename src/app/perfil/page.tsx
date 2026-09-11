@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
+import { FormEvent, useEffect, useState, useMemo } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { api, ApiError, Post, UserResponse } from "../../lib/api";
@@ -71,6 +71,10 @@ export default function PerfilPage() {
   const [postToDelete, setPostToDelete] = useState<Post | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+  const [isEditingAccount, setIsEditingAccount] = useState(false);
+  const [accountUsername, setAccountUsername] = useState("");
+  const [accountEmail, setAccountEmail] = useState("");
+  const [isUpdatingAccount, setIsUpdatingAccount] = useState(false);
   const [toast, setToast] = useState<{ message: string; icon: string } | null>(null);
 
   function triggerToast(message: string, icon = "✓") {
@@ -105,6 +109,8 @@ export default function PerfilPage() {
         if (!active) return;
         setProfile(user);
         setProfileEmail(user.email ?? savedEmail);
+        setAccountUsername(user.username ?? savedEmail.split("@")[0] ?? "uerjiano");
+        setAccountEmail(user.email ?? savedEmail);
 
         try {
           const postsPage = await api.myPosts(token);
@@ -178,6 +184,28 @@ export default function PerfilPage() {
     triggerToast(`${label} copiado para a área de transferência!`, "📋");
   }
 
+  async function handleUpdateAccount(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const token = localStorage.getItem("gossipuerj_token");
+    const username = accountUsername.trim().replace(/^@/, "");
+    const email = accountEmail.trim();
+    if (!token || !username || !email || isUpdatingAccount) return;
+
+    setIsUpdatingAccount(true);
+    try {
+      await api.updateUser(token, { username, email });
+      setProfile((current) => ({ ...current, username, email }));
+      setProfileEmail(email);
+      localStorage.setItem("gossipuerj_email", email);
+      setIsEditingAccount(false);
+      triggerToast("Dados da conta atualizados.", "✓");
+    } catch (error) {
+      triggerToast(error instanceof ApiError ? error.message : "Não foi possível atualizar seus dados.", "⚠️");
+    } finally {
+      setIsUpdatingAccount(false);
+    }
+  }
+
   function handleLogout() {
     localStorage.removeItem("gossipuerj_token");
     localStorage.removeItem("gossipuerj_email");
@@ -213,6 +241,13 @@ export default function PerfilPage() {
     const raw = username.toUpperCase().replace(/[^A-Z0-9]/g, "");
     return `2026.1-UERJ-${raw.slice(0, 5) || "VIP"}`;
   }, [username]);
+
+  function formatApiDate(dateStr: string) {
+    const date = new Date(dateStr);
+    if (Number.isNaN(date.getTime())) return "2026";
+    date.setHours(date.getHours() - 3);
+    return date.toLocaleDateString("pt-BR", { month: "short", year: "2-digit" }).toUpperCase();
+  }
 
   const filteredPosts = useMemo(() => {
     return myPosts.filter((post) => {
@@ -361,6 +396,9 @@ export default function PerfilPage() {
                       ✓ UERJ Verificado
                     </span>
                   </div>
+                  <button type="button" className="profile-edit-account-btn" onClick={() => setIsEditingAccount((current) => !current)}>
+                    {isEditingAccount ? "Fechar edição" : "Editar conta"}
+                  </button>
                 </div>
               </div>
 
@@ -396,6 +434,26 @@ export default function PerfilPage() {
                 )}
               </div>
             </div>
+
+            {isEditingAccount && (
+              <form className="profile-account-editor" onSubmit={handleUpdateAccount}>
+                <div>
+                  <strong>Editar dados da conta</strong>
+                  <small>O email institucional foi necessário para criar e verificar sua conta. Depois disso, você pode usar outro email.</small>
+                </div>
+                <label>
+                  @ do Instagram
+                  <input value={accountUsername} onChange={(event) => setAccountUsername(event.target.value)} required />
+                </label>
+                <label>
+                  Email para contato
+                  <input type="email" value={accountEmail} onChange={(event) => setAccountEmail(event.target.value)} required />
+                </label>
+                <button type="submit" className="create-crush-btn" disabled={isUpdatingAccount}>
+                  {isUpdatingAccount ? "SALVANDO..." : "SALVAR ALTERAÇÕES"}
+                </button>
+              </form>
+            )}
           </div>
 
           {/* ========================================================
@@ -420,7 +478,7 @@ export default function PerfilPage() {
             <div className="stat-card">
               <span className="stat-icon">🗓️</span>
               <div className="stat-number">
-                {profile?.createdAt ? new Date(profile.createdAt).toLocaleDateString("pt-BR", { month: "short", year: "2-digit" }).toUpperCase() : "2026"}
+                {profile?.createdAt ? formatApiDate(profile.createdAt) : "2026"}
               </div>
               <div className="stat-label">Membro Desde</div>
             </div>
@@ -466,13 +524,13 @@ export default function PerfilPage() {
                     </div>
 
                     <div className="carteirinha-field">
-                      <small>E-MAIL INSTITUCIONAL</small>
+                      <small>EMAIL DE CONTATO</small>
                       <span
                         style={{ fontSize: "11px", color: "#555", overflowWrap: "anywhere", cursor: "pointer" }}
                         onClick={() => handleCopyText(profile?.email || profileEmail, "E-mail")}
                         title="Clique para copiar e-mail"
                       >
-                        {profile?.email || profileEmail || "uerjiano@graduacao.uerj.br"}
+                        {profile?.email || profileEmail || "email@exemplo.com"}
                       </span>
                     </div>
 
@@ -747,7 +805,7 @@ export default function PerfilPage() {
           <div className="modal-box">
             <span className="modal-icon">🚪</span>
             <h3>Encerrar sessão?</h3>
-            <p>Você terá que fazer login novamente com seu e-mail institucional para postar ou gerenciar seus dados.</p>
+            <p>Você terá que fazer login novamente com o email da sua conta para postar ou gerenciar seus dados.</p>
             <div className="modal-actions">
               <button
                 type="button"

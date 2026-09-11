@@ -2,10 +2,11 @@
 
 import { FormEvent, useEffect, useState, useMemo } from "react";
 import Link from "next/link";
-import { api, ApiError, Post, PostCategory } from "../lib/api";
+import { api, ApiError, CrushResponse, Post, PostCategory } from "../lib/api";
 import PostCard from "./components/post-card";
 import SiteFooter from "./components/site-footer";
 import SiteHeader from "./components/site-header";
+import UerjBuildingSidebar from "./components/uerj-building-sidebar";
 
 const categories: { value: PostCategory; label: string; icon: string }[] = [
   { value: "CONFESSION", label: "Confissão", icon: "🤫" },
@@ -52,6 +53,8 @@ export default function FeedPage() {
     username: string | null;
     vibe: string | null;
   }>({ token: null, email: null, username: null, vibe: null });
+  const [userCrushCourse, setUserCrushCourse] = useState<string | null>(null);
+  const [buildingCrushes, setBuildingCrushes] = useState<CrushResponse[]>([]);
 
   // Feedback Toast
   const [toast, setToast] = useState<{ message: string; icon: string } | null>(null);
@@ -81,8 +84,28 @@ export default function FeedPage() {
         vibe: savedVibe,
       });
 
+      if (!token) {
+        if (active) setIsLoading(false);
+        return;
+      }
+
+      if (token) {
+        try {
+          const myCrush = await api.getMyCrush(token);
+          if (active) setUserCrushCourse(myCrush.courseName);
+        } catch {
+          if (active) setUserCrushCourse(null);
+        }
+        try {
+          const crushPage = await api.getAllCrushes(0, 100, undefined, token);
+          if (active) setBuildingCrushes(crushPage.content ?? []);
+        } catch {
+          if (active) setBuildingCrushes([]);
+        }
+      }
+
       try {
-        const pageData = await api.getAll(0, PAGE_SIZE);
+        const pageData = await api.getAll(0, PAGE_SIZE, undefined, token ?? undefined);
         if (!active) return;
         const loadedPosts = pageData.content;
         setPosts(loadedPosts);
@@ -137,7 +160,7 @@ export default function FeedPage() {
     setIsLoadingMore(true);
     try {
       const nextPage = currentPage + 1;
-      const pageData = await api.getAll(nextPage, PAGE_SIZE);
+      const pageData = await api.getAll(nextPage, PAGE_SIZE, undefined, userSession.token ?? undefined);
       setPosts((prev) => [...prev, ...pageData.content]);
       setCurrentPage(nextPage);
       setHasMore(!pageData.last);
@@ -262,6 +285,32 @@ export default function FeedPage() {
     }
     return items;
   }, [posts]);
+
+  if (!isLoading && !userSession.token) {
+    return (
+      <div className="site-shell">
+        <SiteHeader active="feed" />
+        <div className="campus-ticker-wrap">
+          <div className="ticker-badge"><span>⚡</span><span>PLANTÃO UERJ</span></div>
+          <div className="ticker-scroll-box"><div className="ticker-track"><span>🔒 O feed do campus é exclusivo para quem tem uma conta</span><span>💬 Entre para ler, comentar e publicar fofocas</span></div></div>
+        </div>
+        <main className="pink-page feed-page feed-login-gate-page">
+          <div className="feed-login-gate">
+            <div className="feed-login-gate-icon">👀</div>
+            <span className="site-guide-kicker">A COMUNIDADE ESTÁ AQUI</span>
+            <h1>Tem coisa rolando na UERJ.</h1>
+            <p>Crie sua conta para ler as fofocas, comentar anonimamente, curtir as bombas do campus e soltar a sua.</p>
+            <div className="feed-login-gate-actions">
+              <Link className="pink-button" href="/login">ENTRAR OU CRIAR CONTA</Link>
+              <Link className="feed-login-guide-link" href="/como-usar">Como funciona o site?</Link>
+            </div>
+            <small>O cadastro começa com email institucional verificado. Depois, você pode atualizar seus dados no perfil.</small>
+          </div>
+        </main>
+        <SiteFooter />
+      </div>
+    );
+  }
 
   return (
     <div className="site-shell">
@@ -574,6 +623,8 @@ export default function FeedPage() {
             {/* Coluna Lateral: Radar do Campus UERJ */}
             <aside className="campus-sidebar">
 
+              <UerjBuildingSidebar userCourse={userCrushCourse} posts={posts} crushes={buildingCrushes} />
+
 
               {/* CARD 2: Estatuto do Fofoqueiro UERJ */}
               <div className="sidebar-card">
@@ -614,6 +665,10 @@ export default function FeedPage() {
                 </Link>
                 <Link className="sidebar-shortcut-btn" href="/grupos">
                   <span>👥 Grupos de WhatsApp</span>
+                  <span>→</span>
+                </Link>
+                <Link className="sidebar-shortcut-btn" href="/como-usar">
+                  <span>📖 Como usar o site</span>
                   <span>→</span>
                 </Link>
               </div>
