@@ -526,6 +526,7 @@ export default function CrushesPage() {
                       <div key={crush.id} className="crush-card-modern">
                         <div className="crush-card-photo-wrap">
                           {crush.photoUrl ? (
+                            /* eslint-disable-next-line @next/next/no-img-element */
                             <img
                               src={crush.photoUrl}
                               alt={`Crush de ${crush.courseName}`}
@@ -627,6 +628,7 @@ export default function CrushesPage() {
                       <div className="match-info-group">
                         <div className="match-avatar-mini">
                           {matchCrush?.photoUrl ? (
+                            /* eslint-disable-next-line @next/next/no-img-element */
                             <img src={matchCrush.photoUrl} alt="Foto do crush" />
                           ) : (
                             <span>{matchCourse.charAt(0) || "💘"}</span>
@@ -734,6 +736,7 @@ export default function CrushesPage() {
                       <div className="match-info-group">
                         <div className="match-avatar-mini" style={{ background: "var(--yellow)" }}>
                           {targetCrush?.photoUrl ? (
+                            /* eslint-disable-next-line @next/next/no-img-element */
                             <img src={targetCrush.photoUrl} alt="Foto do crush" />
                           ) : (
                             <span>{targetCourse.charAt(0) || "💘"}</span>
