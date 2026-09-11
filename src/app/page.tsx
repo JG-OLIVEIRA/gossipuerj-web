@@ -66,20 +66,20 @@ export default function FeedPage() {
   useEffect(() => {
     let active = true;
 
-    // Carregar dados de sessão local
-    const token = localStorage.getItem("gossipuerj_token");
-    const savedEmail = localStorage.getItem("gossipuerj_email");
-    const savedVibe = localStorage.getItem("gossipuerj_vibe");
-    setUserSession({
-      token,
-      email: savedEmail,
-      username: savedEmail ? savedEmail.split("@")[0] : null,
-      vibe: savedVibe,
-    });
-
     async function loadPosts() {
       await Promise.resolve();
       if (!active) return;
+
+      // Carregar dados de sessão local
+      const token = localStorage.getItem("gossipuerj_token");
+      const savedEmail = localStorage.getItem("gossipuerj_email");
+      const savedVibe = localStorage.getItem("gossipuerj_vibe");
+      setUserSession({
+        token,
+        email: savedEmail,
+        username: savedEmail ? savedEmail.split("@")[0] : null,
+        vibe: savedVibe,
+      });
 
       try {
         const pageData = await api.getAll(0, PAGE_SIZE);

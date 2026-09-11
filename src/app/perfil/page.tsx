@@ -62,6 +62,7 @@ export default function PerfilPage() {
   const [profileEmail, setProfileEmail] = useState("");
   const [myPosts, setMyPosts] = useState<Post[]>([]);
   const [totalLikesCount, setTotalLikesCount] = useState<number>(0);
+  const [receivedMatchesCount, setReceivedMatchesCount] = useState<number>(0);
   const [activeTab, setActiveTab] = useState<"posts" | "carteirinha" | "conquistas">("posts");
   const [currentVibeId, setCurrentVibeId] = useState<string>("uerj_raiz");
   const [isVibePickerOpen, setIsVibePickerOpen] = useState(false);
@@ -126,6 +127,15 @@ export default function PerfilPage() {
           }
         } catch {
           if (active) setMyPosts([]);
+        }
+
+        try {
+          const matchesPage = await api.getReceivedMatches(token);
+          if (active && matchesPage?.content) {
+            setReceivedMatchesCount(matchesPage.content.filter((m) => m.status === "PENDING").length);
+          }
+        } catch {
+          // Ignora falha de matches se não houver registros
         }
 
         setAuthenticated(true);
@@ -496,7 +506,13 @@ export default function PerfilPage() {
                 </Link>
                 <Link className="quick-action-btn" href="/crushes">
                   <span>💘 Galeria de Crushes</span>
-                  <span>→</span>
+                  {receivedMatchesCount > 0 ? (
+                    <span style={{ background: "var(--pink)", color: "#fff", padding: "2px 8px", fontSize: "10px", fontWeight: 900, borderRadius: "999px" }}>
+                      {receivedMatchesCount} novos
+                    </span>
+                  ) : (
+                    <span>→</span>
+                  )}
                 </Link>
                 <Link className="quick-action-btn" href="/vendas">
                   <span>🛍️ Desapegos & Vendas</span>

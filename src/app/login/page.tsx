@@ -3,29 +3,9 @@
 import { FormEvent, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { api, ApiError, Gender, Orientation, Post, UserResponse } from "../../lib/api";
+import { api, ApiError, UserResponse } from "../../lib/api";
 import SiteFooter from "../components/site-footer";
 import SiteHeader from "../components/site-header";
-
-const orientations = [
-  { value: "HETEROSEXUAL", label: "Heterossexual" },
-  { value: "HOMOSEXUAL", label: "Homossexual" },
-  { value: "BISEXUAL", label: "Bissexual" },
-  { value: "ASEXUAL", label: "Assexual" },
-  { value: "PANSEXUAL", label: "Pansexual" },
-] as const;
-
-const genders = [
-  { value: "MALE", label: "Masculino" },
-  { value: "FEMALE", label: "Feminino" },
-  { value: "TRANSGENDER", label: "Transgênero" },
-  { value: "NON_BINARY", label: "Não binário" },
-  { value: "OTHER", label: "Outro" },
-] as const;
-
-const genderLabels: Record<string, string> = Object.fromEntries(genders.map((gender) => [gender.value, gender.label]));
-const orientationLabels: Record<string, string> = Object.fromEntries(orientations.map((orientation) => [orientation.value, orientation.label]));
-const postCategoryLabels: Record<string, string> = { CRUSH: "Crush", RELATIONSHIP: "Relacionamentos", ACADEMIC: "Acadêmico", PARTY: "Festa", DRAMA: "Drama", CONFESSION: "Confissão", LOST_AND_FOUND: "Achados e perdidos", MEME: "Meme", ALERT: "Alerta", CAFETERIA: "Bandejão" };
 
 export default function LoginPage() {
   const router = useRouter();
@@ -39,17 +19,6 @@ export default function LoginPage() {
   const [profile, setProfile] = useState<UserResponse | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  const [myPosts, setMyPosts] = useState<Post[]>([]);
-  const [deletingPostId, setDeletingPostId] = useState("");
-
-  async function loadMyPosts(token: string) {
-    try {
-      const page = await api.myPosts(token);
-      setMyPosts(page.content);
-    } catch {
-      setMyPosts([]);
-    }
-  }
 
   useEffect(() => {
     let active = true;
@@ -72,7 +41,6 @@ export default function LoginPage() {
         if (!active) return;
         setProfile(user);
         setProfileEmail(user.email ?? savedEmail);
-        await loadMyPosts(token);
         setAuthenticated(true);
       } catch {
         if (!active) return;
@@ -106,18 +74,18 @@ export default function LoginPage() {
         const user = await api.me(response.token);
         setProfile(user);
         setProfileEmail(user.email ?? email);
-        await loadMyPosts(response.token);
         setAuthenticated(true);
         router.push("/perfil");
         return;
       }
 
+      const inputUsername = String(form.get("username") ?? "").trim();
+      const username = inputUsername || email.split("@")[0] || "uerjiano";
+
       await api.register({
-        username: email.split("@")[0],
+        username,
         email,
         password: String(form.get("password") ?? ""),
-        gender: String(form.get("gender") ?? "") as Gender,
-        orientation: String(form.get("orientation") ?? "") as Orientation,
       });
       setVerificationEmail(email);
       setNeedsVerification(true);
@@ -174,23 +142,7 @@ export default function LoginPage() {
     localStorage.removeItem("gossipuerj_email");
     setProfileEmail("");
     setProfile(null);
-    setMyPosts([]);
     setAuthenticated(false);
-  }
-
-  async function handleDeletePost(postId: string) {
-    const token = localStorage.getItem("gossipuerj_token");
-    if (!token || deletingPostId) return;
-
-    setDeletingPostId(postId);
-    try {
-      await api.deletePost(token, postId);
-      setMyPosts((currentPosts) => currentPosts.filter((post) => post.id !== postId));
-    } catch (requestError) {
-      setError(requestError instanceof ApiError ? requestError.message : "Não foi possível excluir a publicação.");
-    } finally {
-      setDeletingPostId("");
-    }
   }
 
   function handleRequiredFieldInvalid(event: FormEvent<HTMLInputElement | HTMLSelectElement>) {
@@ -253,20 +205,49 @@ export default function LoginPage() {
           <div className="login-logo">GOSSIP<span>UERJ</span></div>
           <h1>{needsVerification ? "Verifique seu email" : mode === "login" ? "Bem-vindo de volta" : "Crie sua conta"}</h1>
           <p>{needsVerification ? `Digite o código enviado para ${verificationEmail}.` : mode === "login" ? "Entre com sua conta para participar do Gossip UERJ." : "Crie seu perfil para interagir com a comunidade UERJ."}</p>
-          {!needsVerification && mode === "register" && <>
-            <label>Gênero<select name="gender" defaultValue="" required onInvalid={handleRequiredFieldInvalid} onInput={clearFieldValidity}><option value="" disabled>Selecione seu gênero</option>{genders.map((gender) => <option key={gender.value} value={gender.value}>{gender.label}</option>)}</select></label>
-            <label>Orientação<select name="orientation" defaultValue="" required onInvalid={handleRequiredFieldInvalid} onInput={clearFieldValidity}><option value="" disabled>Selecione sua orientação</option>{orientations.map((orientation) => <option key={orientation.value} value={orientation.value}>{orientation.label}</option>)}</select></label>
-          </>}
-          {needsVerification ? <label>Código de verificação<input name="verificationCode" inputMode="numeric" required onInvalid={handleRequiredFieldInvalid} onInput={clearFieldValidity} /></label> : <>
-            <label>Email<input name="email" type="email" placeholder="voce@graduacao.uerj.br" required onInvalid={handleRequiredFieldInvalid} onInput={clearFieldValidity} /></label>
-            {mode === "register" && <p className="username-hint">Seu nome de usuário será a parte do email antes do @.</p>}
-            <label>Senha<div className="password-field"><input name="password" type={showPassword ? "text" : "password"} minLength={6} required onInvalid={handleRequiredFieldInvalid} onInput={clearFieldValidity} /><button className="password-toggle" type="button" onClick={() => setShowPassword(!showPassword)} aria-label={showPassword ? "Ocultar senha" : "Mostrar senha"} title={showPassword ? "Ocultar senha" : "Mostrar senha"}>{showPassword ? "◉" : "◌"}</button></div></label>
-          </>}
+          {needsVerification ? (
+            <label>Código de verificação<input name="verificationCode" inputMode="numeric" required onInvalid={handleRequiredFieldInvalid} onInput={clearFieldValidity} /></label>
+          ) : (
+            <>
+              {mode === "register" && (
+                <label>
+                  Nome de usuário (@)
+                  <input name="username" type="text" placeholder="ex: jorgeuerj (opcional)" onInput={clearFieldValidity} />
+                </label>
+              )}
+              <label>
+                Email institucional
+                <input name="email" type="email" placeholder="voce@graduacao.uerj.br" required onInvalid={handleRequiredFieldInvalid} onInput={clearFieldValidity} />
+              </label>
+              <label>
+                Senha
+                <div className="password-field">
+                  <input name="password" type={showPassword ? "text" : "password"} minLength={6} required onInvalid={handleRequiredFieldInvalid} onInput={clearFieldValidity} />
+                  <button className="password-toggle" type="button" onClick={() => setShowPassword(!showPassword)} aria-label={showPassword ? "Ocultar senha" : "Mostrar senha"} title={showPassword ? "Ocultar senha" : "Mostrar senha"}>
+                    {showPassword ? "◉" : "◌"}
+                  </button>
+                </div>
+              </label>
+            </>
+          )}
           {error && <p className="form-error" role="alert">{error}</p>}
           {message && <p className="form-success" role="status">{message}</p>}
-          <button className="pink-button" type="submit" disabled={isSubmitting}>{isSubmitting ? needsVerification ? "VERIFICANDO..." : mode === "login" ? "ENTRANDO..." : "CRIANDO..." : needsVerification ? "VERIFICAR EMAIL" : mode === "login" ? "ENTRAR" : "CRIAR CONTA"}</button>
-          {needsVerification && <button className="resend-button" type="button" onClick={handleResendVerification} disabled={isSubmitting}>{isSubmitting ? "REENVIANDO..." : "REENVIAR CÓDIGO"}</button>}
-          {!needsVerification && <div className="register">{mode === "login" ? "Não tem conta? " : "Já tem conta? "}<button type="button" onClick={() => { setMode(mode === "login" ? "register" : "login"); setMessage(""); setError(""); }}>{mode === "login" ? "CRIAR AGORA" : "VOLTAR AO LOGIN"}</button></div>}
+          <button className="pink-button" type="submit" disabled={isSubmitting}>
+            {isSubmitting ? (needsVerification ? "VERIFICANDO..." : mode === "login" ? "ENTRANDO..." : "CRIANDO...") : needsVerification ? "VERIFICAR EMAIL" : mode === "login" ? "ENTRAR" : "CRIAR CONTA"}
+          </button>
+          {needsVerification && (
+            <button className="resend-button" type="button" onClick={handleResendVerification} disabled={isSubmitting}>
+              {isSubmitting ? "REENVIANDO..." : "REENVIAR CÓDIGO"}
+            </button>
+          )}
+          {!needsVerification && (
+            <div className="register">
+              {mode === "login" ? "Não tem conta? " : "Já tem conta? "}
+              <button type="button" onClick={() => { setMode(mode === "login" ? "register" : "login"); setMessage(""); setError(""); }}>
+                {mode === "login" ? "CRIAR AGORA" : "VOLTAR AO LOGIN"}
+              </button>
+            </div>
+          )}
           <Link className="back-link" href="/">← Voltar para o feed</Link>
         </form>
       </section>

@@ -12,6 +12,7 @@ export class ApiError extends Error {
   }
 }
 
+// Enums & Types from OpenAPI Contract
 export type PostCategory =
   | "CRUSH"
   | "RELATIONSHIP"
@@ -69,6 +70,16 @@ export type UserResponse = {
 
 export type UserDetail = UserResponse;
 
+export type Course = {
+  id: string;
+  name: string;
+};
+
+export type CourseResponse = {
+  id: string;
+  name: string;
+};
+
 export type PostRequest = {
   title: string;
   content: string;
@@ -103,11 +114,15 @@ export type PageResponse<T> = {
   size: number;
   totalElements: number;
   totalPages: number;
+  first?: boolean;
   last: boolean;
 };
 
 export type PageResponsePostResponse = PageResponse<PostResponse>;
 export type PageResponseCommentResponse = PageResponse<CommentResponse>;
+export type PageResponseCourseResponse = PageResponse<CourseResponse>;
+export type PageResponseCrushResponse = PageResponse<CrushResponse>;
+export type PageResponseMatchResponse = PageResponse<MatchResponse>;
 
 export type Comment = {
   id?: string;
@@ -149,8 +164,9 @@ export type RegisterUserRequest = {
   username: string;
   email: string;
   password: string;
-  gender: Gender;
-  orientation: Orientation;
+  // Optional backwards compatibility fields if provided by UI
+  gender?: Gender;
+  orientation?: Orientation;
 };
 
 export type RegisterRequest = RegisterUserRequest;
@@ -160,10 +176,57 @@ export type VerifyUserRequest = {
   verificationCode: string;
 };
 
-async function request<T>(path: string, options: RequestInit): Promise<T> {
+// Crush schemas
+export type Crush = {
+  id: string;
+  user?: User;
+  photoUrl?: string;
+  course?: Course;
+  description?: string;
+  gender?: Gender;
+  orientation?: Orientation;
+  createdAt?: string;
+  updatedAt?: string;
+};
+
+export type CrushRequest = {
+  photoUrl: string;
+  courseName: string;
+  description: string;
+  gender: Gender;
+  orientation: Orientation;
+};
+
+export type CrushResponse = {
+  id: string;
+  photoUrl: string;
+  courseName: string;
+  description: string;
+  gender: Gender;
+  orientation: Orientation;
+};
+
+// Match schemas
+export type MatchStatus = "PENDING" | "ACCEPTED" | "REJECTED";
+
+export type MatchResponse = {
+  id: string;
+  crush?: Crush;
+  likedCrush?: Crush;
+  status: MatchStatus;
+  unmatchedAt?: string;
+  createdAt?: string;
+};
+
+async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
+  const headers: Record<string, string> = {};
+  if (options.body) {
+    headers["Content-Type"] = "application/json";
+  }
+
   const response = await fetch(`${API_URL}${path}`, {
     ...options,
-    headers: { "Content-Type": "application/json", ...options.headers },
+    headers: { ...headers, ...(options.headers as Record<string, string> | undefined) },
   });
 
   if (!response.ok) {
@@ -190,10 +253,13 @@ async function request<T>(path: string, options: RequestInit): Promise<T> {
 }
 
 export const api = {
-  // Post Controller
-  getAll(page = 0, size = 50): Promise<PageResponsePostResponse> {
+  // ==========================================
+  // Post Controller (/api/v1/posts)
+  // ==========================================
+  getAll(page = 0, size = 50, sort?: string[]): Promise<PageResponsePostResponse> {
+    const sortQuery = sort && sort.length ? `&${sort.map((s) => `sort=${encodeURIComponent(s)}`).join("&")}` : "";
     return request<PageResponsePostResponse>(
-      `/api/v1/posts?page=${page}&size=${size}`,
+      `/api/v1/posts?page=${page}&size=${size}${sortQuery}`,
       { method: "GET" }
     );
   },
@@ -231,9 +297,10 @@ export const api = {
     return this.delete(token, postId);
   },
 
-  getAllByUserId(token: string, page = 0, size = 200): Promise<PageResponsePostResponse> {
+  getAllByUserId(token: string, page = 0, size = 200, sort?: string[]): Promise<PageResponsePostResponse> {
+    const sortQuery = sort && sort.length ? `&${sort.map((s) => `sort=${encodeURIComponent(s)}`).join("&")}` : "";
     return request<PageResponsePostResponse>(
-      `/api/v1/posts/me?page=${page}&size=${size}`,
+      `/api/v1/posts/me?page=${page}&size=${size}${sortQuery}`,
       {
         method: "GET",
         headers: { Authorization: `Bearer ${token}` },
@@ -244,7 +311,9 @@ export const api = {
     return this.getAllByUserId(token);
   },
 
-  // Like Controller
+  // ==========================================
+  // Like Controller (/api/v1/posts/.../likes)
+  // ==========================================
   getTotalPostLikes(postId: string): Promise<number> {
     return request<number>(`/api/v1/posts/${encodeURIComponent(postId)}/likes`, {
       method: "GET",
@@ -281,15 +350,25 @@ export const api = {
     );
   },
 
-  // Comment Controller
-  getPostComments(postId: string, page = 0, size = 100): Promise<PageResponseCommentResponse> {
+  // ==========================================
+  // Comment Controller (/api/v1/posts/.../comments)
+  // ==========================================
+  getPostComments(postId: string, page = 0, size = 100, sort?: string[]): Promise<PageResponseCommentResponse> {
+    const sortQuery = sort && sort.length ? `&${sort.map((s) => `sort=${encodeURIComponent(s)}`).join("&")}` : "";
     return request<PageResponseCommentResponse>(
-      `/api/v1/posts/${encodeURIComponent(postId)}/comments?page=${page}&size=${size}`,
+      `/api/v1/posts/${encodeURIComponent(postId)}/comments?page=${page}&size=${size}${sortQuery}`,
       { method: "GET" }
     );
   },
   comments(postId: string): Promise<PageResponseCommentResponse> {
     return this.getPostComments(postId);
+  },
+
+  getComment(postId: string, commentId: string): Promise<CommentResponse> {
+    return request<CommentResponse>(
+      `/api/v1/posts/${encodeURIComponent(postId)}/comments/${encodeURIComponent(commentId)}`,
+      { method: "GET" }
+    );
   },
 
   createComment(token: string, postId: string, data: CommentRequest): Promise<CommentResponse> {
@@ -300,9 +379,10 @@ export const api = {
     });
   },
 
-  getReplies(postId: string, commentId: string, page = 0, size = 50): Promise<PageResponseCommentResponse> {
+  getReplies(postId: string, commentId: string, page = 0, size = 50, sort?: string[]): Promise<PageResponseCommentResponse> {
+    const sortQuery = sort && sort.length ? `&${sort.map((s) => `sort=${encodeURIComponent(s)}`).join("&")}` : "";
     return request<PageResponseCommentResponse>(
-      `/api/v1/posts/${encodeURIComponent(postId)}/comments/${encodeURIComponent(commentId)}/replies?page=${page}&size=${size}`,
+      `/api/v1/posts/${encodeURIComponent(postId)}/comments/${encodeURIComponent(commentId)}/replies?page=${page}&size=${size}${sortQuery}`,
       { method: "GET" }
     );
   },
@@ -321,7 +401,109 @@ export const api = {
     );
   },
 
-  // Auth Controller
+  // ==========================================
+  // Crush Controller (/api/v1/crushes)
+  // ==========================================
+  getAllCrushes(page = 0, size = 50, sort?: string[]): Promise<PageResponseCrushResponse> {
+    const sortQuery = sort && sort.length ? `&${sort.map((s) => `sort=${encodeURIComponent(s)}`).join("&")}` : "";
+    return request<PageResponseCrushResponse>(
+      `/api/v1/crushes?page=${page}&size=${size}${sortQuery}`,
+      { method: "GET" }
+    );
+  },
+  crushes(page = 0, size = 50): Promise<PageResponseCrushResponse> {
+    return this.getAllCrushes(page, size);
+  },
+
+  createCrush(token: string, data: CrushRequest): Promise<CrushResponse> {
+    return request<CrushResponse>("/api/v1/crushes", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+      body: JSON.stringify(data),
+    });
+  },
+
+  getCrush(crushId: string): Promise<CrushResponse> {
+    return request<CrushResponse>(`/api/v1/crushes/${encodeURIComponent(crushId)}`, {
+      method: "GET",
+    });
+  },
+
+  // ==========================================
+  // Match Controller (/api/v1/crushes/.../matches & /api/v1/matches/...)
+  // ==========================================
+  createMatch(token: string, crushId: string): Promise<MatchResponse> {
+    return request<MatchResponse>(`/api/v1/crushes/${encodeURIComponent(crushId)}/matches`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+    });
+  },
+  likeCrush(token: string, crushId: string): Promise<MatchResponse> {
+    return this.createMatch(token, crushId);
+  },
+
+  acceptMatch(token: string, crushId: string, matchId: string): Promise<MatchResponse> {
+    return request<MatchResponse>(
+      `/api/v1/crushes/${encodeURIComponent(crushId)}/matches/${encodeURIComponent(matchId)}/accept`,
+      {
+        method: "PUT",
+        headers: { Authorization: `Bearer ${token}` },
+      }
+    );
+  },
+
+  rejectMatch(token: string, crushId: string, matchId: string): Promise<MatchResponse> {
+    return request<MatchResponse>(
+      `/api/v1/crushes/${encodeURIComponent(crushId)}/matches/${encodeURIComponent(matchId)}/reject`,
+      {
+        method: "PUT",
+        headers: { Authorization: `Bearer ${token}` },
+      }
+    );
+  },
+
+  getSentMatches(token: string, page = 0, size = 50, sort?: string[]): Promise<PageResponseMatchResponse> {
+    const sortQuery = sort && sort.length ? `&${sort.map((s) => `sort=${encodeURIComponent(s)}`).join("&")}` : "";
+    return request<PageResponseMatchResponse>(
+      `/api/v1/matches/sent?page=${page}&size=${size}${sortQuery}`,
+      {
+        method: "GET",
+        headers: { Authorization: `Bearer ${token}` },
+      }
+    );
+  },
+
+  getReceivedMatches(token: string, page = 0, size = 50, sort?: string[]): Promise<PageResponseMatchResponse> {
+    const sortQuery = sort && sort.length ? `&${sort.map((s) => `sort=${encodeURIComponent(s)}`).join("&")}` : "";
+    return request<PageResponseMatchResponse>(
+      `/api/v1/matches/received?page=${page}&size=${size}${sortQuery}`,
+      {
+        method: "GET",
+        headers: { Authorization: `Bearer ${token}` },
+      }
+    );
+  },
+
+  // ==========================================
+  // Course Controller (/api/v1/courses)
+  // ==========================================
+  getCourses(page = 0, size = 100, sort?: string[]): Promise<PageResponseCourseResponse> {
+    const sortQuery = sort && sort.length ? `&${sort.map((s) => `sort=${encodeURIComponent(s)}`).join("&")}` : "";
+    return request<PageResponseCourseResponse>(
+      `/api/v1/courses?page=${page}&size=${size}${sortQuery}`,
+      { method: "GET" }
+    );
+  },
+
+  getCourse(courseId: string): Promise<CourseResponse> {
+    return request<CourseResponse>(`/api/v1/courses/${encodeURIComponent(courseId)}`, {
+      method: "GET",
+    });
+  },
+
+  // ==========================================
+  // Auth Controller (/api/v1/auth)
+  // ==========================================
   login(dataOrEmail: LoginRequest | string, maybePassword?: string): Promise<LoginResponse> {
     const body: LoginRequest =
       typeof dataOrEmail === "string"
@@ -334,9 +516,14 @@ export const api = {
   },
 
   register(data: RegisterUserRequest): Promise<void> {
+    const payload = {
+      username: data.username,
+      email: data.email,
+      password: data.password,
+    };
     return request<void>("/api/v1/auth/register", {
       method: "POST",
-      body: JSON.stringify(data),
+      body: JSON.stringify(payload),
     });
   },
 

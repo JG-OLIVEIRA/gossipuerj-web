@@ -14,15 +14,23 @@ async function forward(request: Request, context: RouteContext) {
   const authorization = request.headers.get("authorization");
   const accept = request.headers.get("accept");
 
-  if (contentType) headers.set("content-type", contentType);
   if (authorization) headers.set("authorization", authorization);
   if (accept) headers.set("accept", accept);
+
+  let bodyData: ArrayBuffer | undefined = undefined;
+  if (request.method !== "GET" && request.method !== "HEAD") {
+    const buffer = await request.arrayBuffer();
+    if (buffer.byteLength > 0) {
+      bodyData = buffer;
+      if (contentType) headers.set("content-type", contentType);
+    }
+  }
 
   try {
     const response = await fetch(target, {
       method: request.method,
       headers,
-      body: request.method === "GET" || request.method === "HEAD" ? undefined : await request.arrayBuffer(),
+      body: bodyData,
       cache: "no-store",
     });
 
