@@ -1860,6 +1860,128 @@ article.post-card {
   margin-top: 10px;
 }
 
+/* Crush Photo Vercel Blob Uploader */
+.crush-photo-uploader-section {
+  margin-bottom: 16px;
+}
+
+.crush-photo-mode-toggle {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.crush-photo-mode-toggle button {
+  flex: 1;
+  padding: 8px 12px;
+  font-size: 11px;
+  font-weight: 800;
+  border: 2px solid var(--ink);
+  background: #f8f8f8;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.crush-photo-mode-toggle button.active {
+  background: var(--yellow);
+  box-shadow: 2px 2px 0 var(--ink);
+}
+
+.crush-dropzone {
+  border: 3px dashed var(--ink);
+  background: #fafafa;
+  padding: 16px;
+  text-align: center;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.crush-dropzone.drag-over {
+  background: #fff8eb;
+  border-color: var(--pink);
+}
+
+.crush-dropzone.has-file {
+  border-style: solid;
+  background: #fff;
+  padding: 12px;
+}
+
+.crush-dropzone-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  cursor: pointer;
+}
+
+.crush-dropzone-icon {
+  font-size: 32px;
+}
+
+.crush-dropzone-text {
+  font-size: 13px;
+  color: var(--ink);
+}
+
+.crush-dropzone-hint {
+  font-size: 11px;
+  color: #777;
+}
+
+.crush-photo-preview-container {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  text-align: left;
+}
+
+.crush-photo-preview-img {
+  width: 80px;
+  height: 80px;
+  object-fit: cover;
+  border: 2px solid var(--ink);
+  box-shadow: 2px 2px 0 var(--ink);
+  flex-shrink: 0;
+}
+
+.crush-photo-preview-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1;
+}
+
+.crush-upload-status {
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.crush-upload-status.uploading {
+  color: #d97706;
+}
+
+.crush-upload-status.success {
+  color: #059669;
+}
+
+.crush-upload-status.ready {
+  color: var(--ink);
+}
+
+.crush-change-photo-btn {
+  display: inline-block;
+  align-self: flex-start;
+  font-size: 11px;
+  font-weight: 800;
+  padding: 4px 10px;
+  background: var(--yellow);
+  border: 2px solid var(--ink);
+  cursor: pointer;
+  margin: 0 !important;
+}
+
 /* Toast Notice */
 .floating-toast {
   position: fixed;

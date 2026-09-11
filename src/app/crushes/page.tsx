@@ -103,6 +103,78 @@ export default function CrushesPage() {
   const [isSubmittingCrush, setIsSubmittingCrush] = useState(false);
   const [modalError, setModalError] = useState("");
 
+  // Upload de Foto via @vercel/blob
+  const [photoUrl, setPhotoUrl] = useState("");
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+  const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
+  const [uploadSuccessMessage, setUploadSuccessMessage] = useState("");
+  const [inputMode, setInputMode] = useState<"upload" | "url">("upload");
+  const [isDragOver, setIsDragOver] = useState(false);
+
+  function resetModalForm() {
+    setSelectedModalCourse("");
+    setCustomCourseName("");
+    setPhotoUrl("");
+    setPhotoPreview(null);
+    setIsUploadingPhoto(false);
+    setUploadSuccessMessage("");
+    setModalError("");
+    setInputMode("upload");
+  }
+
+  async function uploadToVercelBlob(file: File) {
+    if (!file.type.startsWith("image/")) {
+      setModalError("Selecione um arquivo de imagem válido (PNG, JPG, WEBP, etc).");
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      setModalError("A imagem deve ter no máximo 5MB.");
+      return;
+    }
+
+    setModalError("");
+    setIsUploadingPhoto(true);
+    setUploadSuccessMessage("");
+
+    // Prévia visual imediata
+    const localPreviewUrl = URL.createObjectURL(file);
+    setPhotoPreview(localPreviewUrl);
+
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const res = await fetch("/api/upload", {
+        method: "POST",
+        body: formData,
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        if (data.missingToken) {
+          // Token do Vercel Blob ainda não setado no ambiente
+          setPhotoUrl(localPreviewUrl);
+          setModalError(
+            "Aviso: BLOB_READ_WRITE_TOKEN não configurado no Vercel. Para testar agora, você também pode inserir o link direto da imagem na aba 'Link da Imagem'."
+          );
+          return;
+        }
+        throw new Error(data.error || "Erro no upload da foto.");
+      }
+
+      setPhotoUrl(data.url);
+      setPhotoPreview(data.url);
+      setUploadSuccessMessage("Foto armazenada com sucesso no Vercel Blob! ☁️");
+    } catch (err: unknown) {
+      console.error("Erro no upload:", err);
+      setModalError(err instanceof Error ? err.message : "Erro ao enviar foto para o Vercel Blob.");
+    } finally {
+      setIsUploadingPhoto(false);
+    }
+  }
+
   // Toast
   const [toast, setToast] = useState<{ message: string; icon: string } | null>(null);
 
@@ -282,6 +354,11 @@ export default function CrushesPage() {
       return;
     }
 
+    if (isUploadingPhoto) {
+      setModalError("Aguarde a finalização do upload da foto no Vercel Blob.");
+      return;
+    }
+
     setIsSubmittingCrush(true);
     setModalError("");
     const form = new FormData(e.currentTarget);
@@ -289,9 +366,10 @@ export default function CrushesPage() {
     const formCourse = String(form.get("courseName") ?? "").trim();
     const formCustomCourse = String(form.get("customCourseName") ?? "").trim();
     const resolvedCourseName = formCourse === "__OTHER__" ? formCustomCourse : (formCourse || selectedModalCourse);
+    const resolvedPhotoUrl = (photoUrl || String(form.get("photoUrl") ?? "")).trim();
 
     const payload: CrushRequest = {
-      photoUrl: String(form.get("photoUrl") ?? "").trim(),
+      photoUrl: resolvedPhotoUrl,
       courseName: resolvedCourseName,
       description: String(form.get("description") ?? "").trim(),
       gender: String(form.get("gender") ?? "OTHER") as Gender,
@@ -299,7 +377,7 @@ export default function CrushesPage() {
     };
 
     if (!payload.photoUrl || !payload.courseName || !payload.description) {
-      setModalError("Por favor selecione seu curso da UERJ e preencha todos os campos obrigatórios.");
+      setModalError("Por favor escolha uma foto, selecione seu curso da UERJ e preencha os campos obrigatórios.");
       setIsSubmittingCrush(false);
       return;
     }
@@ -307,6 +385,7 @@ export default function CrushesPage() {
     try {
       const newCrush = await api.createCrush(token, payload);
       setCrushes((prev) => [newCrush, ...prev]);
+      resetModalForm();
       setIsModalOpen(false);
       showToast("Seu perfil de Crush foi publicado na vitrine da UERJ!", "✨");
     } catch (err) {
@@ -804,13 +883,24 @@ export default function CrushesPage() {
 
       {/* MODAL: CADASTRAR PERFIL DE CRUSH */}
       {isModalOpen && (
-        <div className="crush-modal-backdrop" onClick={() => !isSubmittingCrush && setIsModalOpen(false)}>
+        <div
+          className="crush-modal-backdrop"
+          onClick={() => {
+            if (!isSubmittingCrush && !isUploadingPhoto) {
+              resetModalForm();
+              setIsModalOpen(false);
+            }
+          }}
+        >
           <div className="crush-modal-card" onClick={(e) => e.stopPropagation()}>
             <button
               type="button"
               className="crush-modal-close"
-              onClick={() => setIsModalOpen(false)}
-              disabled={isSubmittingCrush}
+              onClick={() => {
+                resetModalForm();
+                setIsModalOpen(false);
+              }}
+              disabled={isSubmittingCrush || isUploadingPhoto}
             >
               ✕
             </button>
@@ -827,15 +917,112 @@ export default function CrushesPage() {
             )}
 
             <form className="crush-modal-form" onSubmit={handleCreateCrush}>
-              <label>
-                URL da sua foto (ou imagem de perfil) *
-                <input
-                  name="photoUrl"
-                  type="url"
-                  placeholder="https://exemplo.com/sua-foto.jpg"
-                  required
-                />
-              </label>
+              {/* Seletor e Upload da Foto com @vercel/blob */}
+              <div className="crush-photo-uploader-section">
+                <label style={{ marginBottom: "6px" }}>Foto do Perfil *</label>
+                
+                <div className="crush-photo-mode-toggle">
+                  <button
+                    type="button"
+                    className={inputMode === "upload" ? "active" : ""}
+                    onClick={() => setInputMode("upload")}
+                  >
+                    ☁️ Upload (@vercel/blob)
+                  </button>
+                  <button
+                    type="button"
+                    className={inputMode === "url" ? "active" : ""}
+                    onClick={() => setInputMode("url")}
+                  >
+                    🔗 Link da Imagem
+                  </button>
+                </div>
+
+                {inputMode === "upload" ? (
+                  <div
+                    className={`crush-dropzone ${isDragOver ? "drag-over" : ""} ${photoPreview ? "has-file" : ""}`}
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      setIsDragOver(true);
+                    }}
+                    onDragLeave={() => setIsDragOver(false)}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      setIsDragOver(false);
+                      const file = e.dataTransfer.files?.[0];
+                      if (file) uploadToVercelBlob(file);
+                    }}
+                  >
+                    {photoPreview ? (
+                      <div className="crush-photo-preview-container">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={photoPreview} alt="Prévia da foto" className="crush-photo-preview-img" />
+                        <div className="crush-photo-preview-meta">
+                          {isUploadingPhoto ? (
+                            <span className="crush-upload-status uploading">
+                              Salvando no Vercel Blob... ⏳
+                            </span>
+                          ) : uploadSuccessMessage ? (
+                            <span className="crush-upload-status success">
+                              {uploadSuccessMessage}
+                            </span>
+                          ) : (
+                            <span className="crush-upload-status ready">Foto carregada</span>
+                          )}
+                          <label className="crush-change-photo-btn">
+                            Trocar foto
+                            <input
+                              type="file"
+                              accept="image/*"
+                              disabled={isUploadingPhoto}
+                              onChange={(e) => {
+                                const f = e.target.files?.[0];
+                                if (f) uploadToVercelBlob(f);
+                              }}
+                              style={{ display: "none" }}
+                            />
+                          </label>
+                        </div>
+                      </div>
+                    ) : (
+                      <label className="crush-dropzone-inner">
+                        <input
+                          type="file"
+                          accept="image/*"
+                          disabled={isUploadingPhoto}
+                          onChange={(e) => {
+                            const f = e.target.files?.[0];
+                            if (f) uploadToVercelBlob(f);
+                          }}
+                          style={{ display: "none" }}
+                        />
+                        <span className="crush-dropzone-icon">📷</span>
+                        <span className="crush-dropzone-text">
+                          <strong>Clique para selecionar</strong> ou arraste sua foto aqui
+                        </span>
+                        <span className="crush-dropzone-hint">
+                          Armazenamento em nuvem via @vercel/blob (PNG, JPG, WEBP até 5MB)
+                        </span>
+                      </label>
+                    )}
+                  </div>
+                ) : (
+                  <div>
+                    <input
+                      name="photoUrl"
+                      type="url"
+                      placeholder="https://exemplo.com/sua-foto.jpg"
+                      value={photoUrl}
+                      onChange={(e) => {
+                        setPhotoUrl(e.target.value);
+                        setPhotoPreview(e.target.value || null);
+                      }}
+                      required={!photoUrl}
+                    />
+                  </div>
+                )}
+                <input type="hidden" name="photoUrl" value={photoUrl} />
+              </div>
 
               <label>
                 Seu Curso de Graduação na UERJ *
