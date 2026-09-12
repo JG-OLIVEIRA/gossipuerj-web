@@ -208,9 +208,18 @@ export default function FeedPage() {
       setCategory("CONFESSION");
       triggerToast("Fofoca publicada no campus com sucesso!", "📢");
     } catch (requestError) {
-      if (requestError instanceof ApiError && (requestError.status === 401 || requestError.status === 403)) {
+      const isMissingAuthenticatedUser =
+        requestError instanceof ApiError &&
+        requestError.message.toLowerCase().includes("usuário") &&
+        requestError.message.toLowerCase().includes("não foi encontrado");
+      if (requestError instanceof ApiError && requestError.status === 401) {
+        localStorage.removeItem("gossipuerj_token");
+        localStorage.removeItem("gossipuerj_email");
+        setUserSession((current) => ({ ...current, token: null, email: null, username: null }));
         setError("Sua sessão expirou. Entre novamente para publicar.");
         triggerToast("Sessão expirada. Entre novamente.", "⚠️");
+      } else if (isMissingAuthenticatedUser) {
+        setError("A API não encontrou sua conta para esta sessão. Saia e entre novamente.");
       } else {
         setError(requestError instanceof ApiError ? requestError.message : "Não foi possível publicar sua fofoca.");
       }
@@ -557,32 +566,25 @@ export default function FeedPage() {
               </div>
             </div>
 
-            {/* Chips de Categoria com Contadores */}
+            {/* Seletor de Categoria com Contadores */}
             <div className="feed-category-pills-row">
-              <button
-                type="button"
-                className={`filter-pill ${selectedCategory === "ALL" ? "active" : ""}`}
-                onClick={() => setSelectedCategory("ALL")}
+              <label className="feed-category-select-label" htmlFor="feed-category-filter">
+                Categoria
+              </label>
+              <select
+                id="feed-category-filter"
+                className="feed-category-select"
+                value={selectedCategory}
+                onChange={(event) => setSelectedCategory(event.target.value)}
+                aria-label="Filtrar fofocas por categoria"
               >
-                <span>✨ Todos</span>
-                <span className="filter-pill-count">{posts.length}</span>
-              </button>
-
-              {categories.map((c) => {
-                const count = categoryCounts[c.value] || 0;
-                return (
-                  <button
-                    key={c.value}
-                    type="button"
-                    className={`filter-pill ${selectedCategory === c.value ? "active" : ""}`}
-                    onClick={() => setSelectedCategory(c.value)}
-                  >
-                    <span>{c.icon}</span>
-                    <span>{c.label}</span>
-                    <span className="filter-pill-count">{count}</span>
-                  </button>
-                );
-              })}
+                <option value="ALL">✨ Todos ({posts.length})</option>
+                {categories.map((c) => (
+                  <option key={c.value} value={c.value}>
+                    {c.icon} {c.label} ({categoryCounts[c.value] || 0})
+                  </option>
+                ))}
+              </select>
             </div>
           </div>
 

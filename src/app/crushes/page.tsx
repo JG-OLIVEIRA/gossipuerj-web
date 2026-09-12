@@ -13,7 +13,6 @@ import {
 } from "../../lib/api";
 import SiteFooter from "../components/site-footer";
 import SiteHeader from "../components/site-header";
-import { UERJ_COURSES_BY_AREA } from "../../lib/uerj-courses";
 
 function getPrivatePhotoUrl(photoUrl: string): string {
   return `/api/upload?url=${encodeURIComponent(photoUrl)}`;
@@ -63,8 +62,6 @@ export default function CrushesPage() {
 
   // Modal de cadastro de perfil
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [selectedModalCourse, setSelectedModalCourse] = useState("");
-  const [customCourseName, setCustomCourseName] = useState("");
   const [isSubmittingCrush, setIsSubmittingCrush] = useState(false);
   const [modalError, setModalError] = useState("");
 
@@ -76,8 +73,6 @@ export default function CrushesPage() {
   const [isDragOver, setIsDragOver] = useState(false);
 
   function resetModalForm() {
-    setSelectedModalCourse("");
-    setCustomCourseName("");
     setPhotoUrl("");
     setPhotoPreview(null);
     setIsUploadingPhoto(false);
@@ -297,21 +292,17 @@ export default function CrushesPage() {
     setModalError("");
     const form = new FormData(e.currentTarget);
 
-    const formCourse = String(form.get("courseName") ?? "").trim();
-    const formCustomCourse = String(form.get("customCourseName") ?? "").trim();
-    const resolvedCourseName = formCourse === "__OTHER__" ? formCustomCourse : (formCourse || selectedModalCourse);
     const resolvedPhotoUrl = (photoUrl || String(form.get("photoUrl") ?? "")).trim();
 
     const payload: CrushRequest = {
       photoUrl: resolvedPhotoUrl,
-      courseName: resolvedCourseName,
       description: String(form.get("description") ?? "").trim(),
       gender: String(form.get("gender") ?? "OTHER") as Gender,
       orientation: String(form.get("orientation") ?? "BISEXUAL") as Orientation,
     };
 
-    if (!payload.photoUrl || !payload.courseName || !payload.description) {
-      setModalError("Por favor escolha uma foto, selecione seu curso da UERJ e preencha os campos obrigatórios.");
+    if (!payload.photoUrl || !payload.description) {
+      setModalError("Por favor escolha uma foto e preencha a descrição do seu perfil.");
       setIsSubmittingCrush(false);
       return;
     }
@@ -401,17 +392,6 @@ export default function CrushesPage() {
                       if (file) void uploadToVercelBlob(file);
                     }}
                   />
-                </label>
-                <label>
-                  Seu curso na UERJ
-                  <select name="courseName" defaultValue="" required>
-                    <option value="" disabled>Selecione seu curso...</option>
-                    {Object.entries(UERJ_COURSES_BY_AREA).map(([area, courseList]) => (
-                      <optgroup key={area} label={`Área: ${area}`}>
-                        {courseList.map((course) => <option key={course} value={course}>{course}</option>)}
-                      </optgroup>
-                    ))}
-                  </select>
                 </label>
                 <label>
                   Uma descrição sobre você
@@ -735,44 +715,6 @@ export default function CrushesPage() {
                 </div>
                 <input type="hidden" name="photoUrl" value={photoUrl} />
               </div>
-
-              <label>
-                Seu Curso de Graduação na UERJ *
-                <select
-                  name="courseName"
-                  value={selectedModalCourse}
-                  onChange={(e) => setSelectedModalCourse(e.target.value)}
-                  required
-                >
-                  <option value="" disabled>
-                    Selecione seu curso oficial da UERJ...
-                  </option>
-                  {Object.entries(UERJ_COURSES_BY_AREA).map(([area, courseList]) => (
-                    <optgroup key={area} label={`Área: ${area}`}>
-                      {courseList.map((c) => (
-                        <option key={c} value={c}>
-                          {c}
-                        </option>
-                      ))}
-                    </optgroup>
-                  ))}
-                  <option value="__OTHER__">✨ Outro curso / Digitar manualmente...</option>
-                </select>
-              </label>
-
-              {selectedModalCourse === "__OTHER__" && (
-                <label>
-                  Nome do Curso na UERJ *
-                  <input
-                    name="customCourseName"
-                    type="text"
-                    placeholder="Digite o nome do seu curso..."
-                    value={customCourseName}
-                    onChange={(e) => setCustomCourseName(e.target.value)}
-                    required
-                  />
-                </label>
-              )}
 
               <label>
                 Descrição / Fofoca sobre você *

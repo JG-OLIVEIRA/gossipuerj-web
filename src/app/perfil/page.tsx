@@ -150,7 +150,14 @@ export default function PerfilPage() {
         setAuthenticated(true);
       } catch (err) {
         if (!active) return;
-        if (err instanceof ApiError && (err.status === 401 || err.status === 403)) {
+        const userIsUnavailable =
+          err instanceof ApiError &&
+          (err.status === 401 ||
+            err.status === 403 ||
+            err.status === 404 ||
+            err.message.toLowerCase().includes("usuário") &&
+              err.message.toLowerCase().includes("não foi encontrado"));
+        if (userIsUnavailable) {
           localStorage.removeItem("gossipuerj_token");
           localStorage.removeItem("gossipuerj_email");
           setAuthenticated(false);
@@ -254,9 +261,13 @@ export default function PerfilPage() {
 
   function formatApiDate(dateStr: string) {
     const date = new Date(dateStr);
-    if (Number.isNaN(date.getTime())) return "2026";
-    date.setHours(date.getHours() - 3);
-    return date.toLocaleDateString("pt-BR", { month: "short", year: "2-digit" }).toUpperCase();
+    if (Number.isNaN(date.getTime())) return "N/D";
+
+    const day = date.getDate().toString().padStart(2, "0");
+    const month = date.toLocaleDateString("pt-BR", { month: "short" }).toUpperCase();
+    const year = date.getFullYear();
+
+    return `${day} ${month} ${year}`;
   }
 
   const filteredPosts = useMemo(() => {
@@ -512,7 +523,7 @@ export default function PerfilPage() {
             <div className="stat-card">
               <span className="stat-icon">🗓️</span>
               <div className="stat-number">
-                {profile?.createdAt ? formatApiDate(profile.createdAt) : "2026"}
+                {profile?.createdAt ? formatApiDate(profile.createdAt) : "N/D"}
               </div>
               <div className="stat-label">Membro Desde</div>
             </div>

@@ -9,19 +9,27 @@ import SiteFooter from "../components/site-footer";
 import SiteHeader from "../components/site-header";
 
 function getFriendlyError(error: unknown, fallback: string): string {
+  if (error instanceof Error && !(error instanceof ApiError)) {
+    return error.message || fallback;
+  }
   if (!(error instanceof ApiError)) return fallback;
   const message = error.message.toLowerCase();
 
-  if (error.status === 401 || message.includes("senha") || message.includes("credencial")) {
+  if (
+    error.status === 401 ||
+    message.includes("senha") ||
+    message.includes("credencial") ||
+    message.includes("bad credentials")
+  ) {
     return "Email ou senha incorretos. Confira os dados e tente novamente.";
   }
-  if (error.status === 404) return "Não encontramos uma conta com esse email.";
+  if (error.status === 404) return "Não encontramos uma conta com esse email institucional.";
   if (error.status === 409) return "Esse email já está cadastrado. Tente entrar na sua conta.";
   if (error.status >= 500) return "O servidor está indisponível no momento. Tente novamente em instantes.";
   if (message.includes("código") || message.includes("verification")) {
     return "Esse código não é válido ou já expirou. Solicite um novo código.";
   }
-  return fallback;
+  return error.message || fallback;
 }
 
 export default function LoginPage() {
@@ -60,11 +68,24 @@ export default function LoginPage() {
         setProfile(user);
         setProfileEmail(user.email ?? savedEmail);
         setAuthenticated(true);
-      } catch {
+      } catch (checkErr) {
         if (!active) return;
-        localStorage.removeItem("gossipuerj_token");
-        localStorage.removeItem("gossipuerj_email");
-        setAuthenticated(false);
+        const userIsUnavailable =
+          checkErr instanceof ApiError &&
+          (checkErr.status === 401 ||
+            checkErr.status === 403 ||
+            checkErr.status === 404 ||
+            checkErr.message.toLowerCase().includes("usuário") &&
+              checkErr.message.toLowerCase().includes("não foi encontrado"));
+        if (userIsUnavailable) {
+          localStorage.removeItem("gossipuerj_token");
+          localStorage.removeItem("gossipuerj_email");
+          setAuthenticated(false);
+        } else {
+          // Mantém logado caso api.me falhe momentaneamente
+          setProfileEmail(savedEmail);
+          setAuthenticated(true);
+        }
       }
     }
 
@@ -82,24 +103,35 @@ export default function LoginPage() {
     setMessage("");
     setError("");
     const form = new FormData(event.currentTarget);
-    const email = String(form.get("email") ?? "");
+    const email = String(form.get("email") ?? "").trim().toLowerCase();
+    const password = String(form.get("password") ?? "");
 
     try {
       if (mode === "forgot") {
         await api.forgetPassword(email);
-          setVerificationEmail(email);
+        setVerificationEmail(email);
         setPasswordResetRequested(true);
         setMessage("Confira seu email para obter o código de recuperação.");
         return;
       }
 
       if (mode === "login") {
-        const response = await api.login(email, String(form.get("password") ?? ""));
+        const response = await api.login(email, password);
+        if (!response?.token) {
+          throw new Error("A API não retornou o token de acesso. Tente novamente.");
+        }
         localStorage.setItem("gossipuerj_token", response.token);
         localStorage.setItem("gossipuerj_email", email);
-        const user = await api.me(response.token);
-        setProfile(user);
-        setProfileEmail(user.email ?? email);
+
+        // Tentar obter dados do perfil; se falhar temporariamente, não derruba o login já bem-sucedido
+        try {
+          const user = await api.me(response.token);
+          setProfile(user);
+          setProfileEmail(user.email ?? email);
+        } catch {
+          setProfileEmail(email);
+        }
+
         setAuthenticated(true);
         router.push("/perfil");
         return;
@@ -119,14 +151,20 @@ export default function LoginPage() {
         username,
         courseName,
         email,
-        password: String(form.get("password") ?? ""),
+        password,
       });
       setVerificationEmail(email);
       setNeedsVerification(true);
-      setMessage("Conta criada. Confira seu email para obter o código de verificação.");
+      setMessage("Conta criada! Enviamos um código de verificação para o seu email institucional.");
     } catch (requestError) {
-      if (requestError instanceof ApiError && requestError.message.toLowerCase().includes("não foi encontrado")) {
-        setError("Não encontramos uma conta com esse email. Você pode criar uma conta agora.");
+      if (!(requestError instanceof ApiError) || requestError.status >= 500) {
+        console.error("[Login/Auth] Erro capturado:", requestError);
+      }
+      if (
+        requestError instanceof ApiError &&
+        (requestError.message.toLowerCase().includes("não foi encontrado") || requestError.status === 404)
+      ) {
+        setError("Não encontramos uma conta cadastrada com esse email institucional.");
       } else {
         setError(getFriendlyError(requestError, "Não foi possível concluir a solicitação."));
       }
@@ -262,8 +300,40 @@ export default function LoginPage() {
       <section className="pink-page login-page">
         <form className="login-card" onSubmit={needsVerification ? handleVerification : passwordResetRequested ? handlePasswordReset : handleSubmit}>
           <div className="login-logo">GOSSIP<span>UERJ</span></div>
+
+          {!needsVerification && !passwordResetRequested && (
+            <div className="login-mode-tabs" role="tablist" aria-label="Modo de acesso">
+              <button
+                type="button"
+                role="tab"
+                aria-selected={mode === "login"}
+                className={`login-mode-tab ${mode === "login" ? "active" : ""}`}
+                onClick={() => {
+                  setMode("login");
+                  setError("");
+                  setMessage("");
+                }}
+              >
+                ENTRAR
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={mode === "register"}
+                className={`login-mode-tab ${mode === "register" ? "active" : ""}`}
+                onClick={() => {
+                  setMode("register");
+                  setError("");
+                  setMessage("");
+                }}
+              >
+                CRIAR CONTA
+              </button>
+            </div>
+          )}
+
           <h1>{needsVerification ? "Verifique seu email" : passwordResetRequested ? "Redefina sua senha" : mode === "forgot" ? "Recupere sua senha" : mode === "login" ? "Bem-vindo de volta" : "Crie sua conta"}</h1>
-          <p>{needsVerification ? `Digite o código enviado para ${verificationEmail}.` : passwordResetRequested ? "Digite o código recebido e escolha uma nova senha." : mode === "forgot" ? "Enviaremos um código para você criar uma nova senha." : mode === "login" ? "Entre com sua conta para participar do Gossip UERJ." : "Crie seu perfil para interagir com a comunidade UERJ."}</p>
+          <p>{needsVerification ? `Digite o código enviado para ${verificationEmail}.` : passwordResetRequested ? "Digite o código recebido e escolha uma nova senha." : mode === "forgot" ? "Enviaremos um código para você criar uma nova senha." : mode === "login" ? "Entre com sua conta institucional para participar do Gossip UERJ." : "Crie seu perfil com seu email @uerj.br ou @graduacao.uerj.br."}</p>
           {needsVerification ? (
             <label>Código de verificação<input name="verificationCode" inputMode="numeric" required onInvalid={handleRequiredFieldInvalid} onInput={clearFieldValidity} /></label>
           ) : passwordResetRequested ? (
@@ -334,7 +404,24 @@ export default function LoginPage() {
               </label>
             </>
           )}
-          {error && <p className="form-error login-feedback" role="alert">{error}</p>}
+          {error && (
+            <div className="form-error login-feedback" role="alert">
+              <div>{error}</div>
+              {mode === "login" && error.includes("Não encontramos") && (
+                <button
+                  type="button"
+                  className="login-quick-create-btn"
+                  onClick={() => {
+                    setMode("register");
+                    setError("");
+                    setMessage("Preencha seu curso para criar sua conta agora:");
+                  }}
+                >
+                  👉 Clique aqui para Criar sua Conta
+                </button>
+              )}
+            </div>
+          )}
           {message && <p className="form-success login-feedback" role="status">{message}</p>}
           <button className="pink-button" type="submit" disabled={isSubmitting}>
             {isSubmitting ? "AGUARDE..." : needsVerification ? "VERIFICAR EMAIL" : passwordResetRequested ? "REDEFINIR SENHA" : mode === "forgot" ? "ENVIAR CÓDIGO" : mode === "login" ? "ENTRAR" : "CRIAR CONTA"}
@@ -343,14 +430,6 @@ export default function LoginPage() {
             <button className="resend-button" type="button" onClick={handleResendVerification} disabled={isSubmitting}>
               {isSubmitting ? "REENVIANDO..." : "REENVIAR CÓDIGO"}
             </button>
-          )}
-          {!needsVerification && !passwordResetRequested && (
-            <div className="register">
-              {mode === "forgot" ? "Lembrou sua senha? " : mode === "login" ? "Não tem conta? " : "Já tem conta? "}
-              <button type="button" onClick={() => { setMode(mode === "login" ? "register" : "login"); setMessage(""); setError(""); }}>
-                {mode === "forgot" || mode === "register" ? "VOLTAR AO LOGIN" : "CRIAR AGORA"}
-              </button>
-            </div>
           )}
           {mode === "login" && !needsVerification && !passwordResetRequested && (
             <button className="forgot-password-link" type="button" onClick={() => { setMode("forgot"); setMessage(""); setError(""); }}>

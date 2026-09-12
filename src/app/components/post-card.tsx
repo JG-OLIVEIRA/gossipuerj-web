@@ -157,7 +157,6 @@ export default function PostCard({
     setIsSubmittingComment(true);
     try {
       const created = await api.createComment(token, post.id, {
-        postId: post.id,
         content: newCommentText.trim(),
       });
       setComments((prev) => [...prev, created]);
@@ -181,7 +180,6 @@ export default function PostCard({
     setIsSubmittingReply(true);
     try {
       const reply = await api.replyComment(token, post.id, commentId, {
-        postId: post.id,
         content: replyText.trim(),
       });
       // Append reply optimistically; also refresh to keep in sync

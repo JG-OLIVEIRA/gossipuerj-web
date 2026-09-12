@@ -107,7 +107,6 @@ export type PostResponse = {
 export type Post = PostResponse;
 
 export type CommentRequest = {
-  postId?: string;
   content: string;
 };
 
@@ -252,8 +251,17 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   if (!response.ok) {
     let message = "A API recusou a solicitação.";
     try {
-      const body = (await response.json()) as { message?: string; error?: string };
-      message = body.message ?? body.error ?? message;
+      const body = (await response.json()) as {
+        message?: string;
+        error?: string;
+        details?: string;
+        errors?: Array<{ field?: string; message?: string }>;
+      };
+      if (body.errors && Array.isArray(body.errors) && body.errors.length > 0) {
+        message = body.errors.map((e) => `${e.field ? `${e.field}: ` : ""}${e.message}`).join(", ");
+      } else {
+        message = body.message ?? body.error ?? body.details ?? message;
+      }
     } catch {
       message = response.statusText || message;
     }
