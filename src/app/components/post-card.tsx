@@ -2,6 +2,7 @@
 
 import { FormEvent, useEffect, useState } from "react";
 import { api, ApiError, CommentResponse, PostResponse } from "../../lib/api";
+import { findFloorForCourse } from "./uerj-building-sidebar";
 
 type PostCardProps = {
   post: PostResponse;
@@ -10,6 +11,7 @@ type PostCardProps = {
   onDelete: (postId: string) => void;
   isDeleting: boolean;
   onError: (msg: string) => void;
+  onSelectCourse?: (courseName: string) => void;
 };
 
 export default function PostCard({
@@ -19,6 +21,7 @@ export default function PostCard({
   onDelete,
   isDeleting,
   onError,
+  onSelectCourse,
 }: PostCardProps) {
   const [likesCount, setLikesCount] = useState<number>(0);
   const [isLiking, setIsLiking] = useState(false);
@@ -262,6 +265,22 @@ function formatPostDate(dateStr: string) {
           <span className="post-anonymous-badge">
             🔒 ANÔNIMO
           </span>
+          {post.courseName && (
+            <button
+              type="button"
+              className="post-course-tag"
+              onClick={() => onSelectCourse?.(post.courseName!)}
+              title={`Clique para filtrar fofocas de ${post.courseName}`}
+            >
+              <span>🎓</span>
+              <span>{post.courseName}</span>
+              {findFloorForCourse(post.courseName) && (
+                <span className="post-course-floor-pill">
+                  {findFloorForCourse(post.courseName)?.floor}º and.
+                </span>
+              )}
+            </button>
+          )}
         </div>
 
         <div className="post-meta-right">

@@ -42,23 +42,71 @@ type Props = {
   userCourse?: string | null;
   posts?: Post[];
   crushes?: CrushResponse[];
+  selectedFloor?: string | null;
+  onSelectFloor?: (floor: string | null) => void;
+  selectedCourse?: string | null;
+  onSelectCourse?: (course: string | null) => void;
 };
 
-export default function UerjBuildingSidebar({ userCourse, posts = [], crushes = [] }: Props) {
-  const [openFloor, setOpenFloor] = useState<string | null>(null);
+export default function UerjBuildingSidebar({
+  userCourse,
+  posts = [],
+  crushes = [],
+  selectedFloor,
+  onSelectFloor,
+  selectedCourse,
+  onSelectCourse,
+}: Props) {
+  const [openFloor, setOpenFloor] = useState<string | null>(selectedFloor ?? null);
   const userFloor = findFloorForCourse(userCourse);
 
   const floorStats = UERJ_BUILDING_FLOORS.map((floor) => {
     const searchableTerms = [...floor.courses, ...floor.places, floor.label].map(normalize);
-    const gossipCount = posts.filter((post) => {
+    const floorPosts = posts.filter((post) => {
+      if (post.courseName) {
+        const pFloor = findFloorForCourse(post.courseName);
+        if (pFloor?.floor === floor.floor) return true;
+      }
       const text = normalize(`${post.title} ${post.content}`);
       return searchableTerms.some((term) => term.length > 2 && text.includes(term));
-    }).length;
+    });
     const crushCount = crushes.filter((crush) => findFloorForCourse(crush.courseName)?.floor === floor.floor).length;
-    return { floor, gossipCount, crushCount };
+    return { floor, gossipCount: floorPosts.length, crushCount, posts: floorPosts };
   });
+
   const topGossipFloor = [...floorStats].sort((a, b) => b.gossipCount - a.gossipCount)[0];
   const topCrushFloor = [...floorStats].sort((a, b) => b.crushCount - a.crushCount)[0];
+
+  const activeFloorObj = selectedFloor
+    ? UERJ_BUILDING_FLOORS.find((f) => f.floor === selectedFloor)
+    : null;
+
+  function handleToggleFloor(floorNumber: string) {
+    if (openFloor === floorNumber) {
+      setOpenFloor(null);
+    } else {
+      setOpenFloor(floorNumber);
+    }
+  }
+
+  function handleFilterFloor(floorNumber: string) {
+    if (selectedFloor === floorNumber) {
+      onSelectFloor?.(null);
+    } else {
+      onSelectFloor?.(floorNumber);
+      onSelectCourse?.(null);
+      setOpenFloor(floorNumber);
+    }
+  }
+
+  function handleFilterCourse(courseName: string) {
+    if (selectedCourse === courseName) {
+      onSelectCourse?.(null);
+    } else {
+      onSelectCourse?.(courseName);
+      onSelectFloor?.(null);
+    }
+  }
 
   return (
     <div className="uerj-building-sidebar sidebar-card">
@@ -66,38 +114,155 @@ export default function UerjBuildingSidebar({ userCourse, posts = [], crushes = 
         <strong>🏛️ PAVILHÃO JOÃO LYRA</strong>
         <span>13 NÍVEIS</span>
       </div>
-      <p className="building-sidebar-intro">O prédio da UERJ contado como um feed. Escolha um andar para ver o que vive ali.</p>
+      <p className="building-sidebar-intro">
+        O prédio da UERJ conectado às fofocas! Clique em um andar ou curso para filtrar o feed do campus em tempo real.
+      </p>
+
+      {/* Banner de Filtro Ativo no Feed */}
+      {(selectedFloor || selectedCourse) && (
+        <div className="building-active-filter-bar">
+          <div style={{ display: "flex", alignItems: "center", gap: "6px", minWidth: 0 }}>
+            <span style={{ fontSize: "14px" }}>🎯</span>
+            <div style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              <span style={{ fontSize: "9px", textTransform: "uppercase", fontWeight: 800, color: "#666", display: "block" }}>
+                Filtrando o Feed:
+              </span>
+              <strong style={{ fontSize: "11px", color: "var(--ink)" }}>
+                {selectedCourse ? selectedCourse : activeFloorObj?.label}
+              </strong>
+            </div>
+          </div>
+          <button
+            type="button"
+            className="clear-building-filter-btn"
+            onClick={() => {
+              onSelectFloor?.(null);
+              onSelectCourse?.(null);
+            }}
+            title="Remover filtro e mostrar todas as fofocas"
+          >
+            ✕ Limpar
+          </button>
+        </div>
+      )}
 
       <div className="building-ranking" aria-label="Ranking de andares">
-        <div><span>🔥 Mais fofocas</span><strong>{topGossipFloor.gossipCount > 0 ? topGossipFloor.floor.label : "Sem localização"}</strong><small>{topGossipFloor.gossipCount} identificadas</small></div>
-        <div><span>💘 Mais Crushes</span><strong>{topCrushFloor.crushCount > 0 ? topCrushFloor.floor.label : "Ainda sem dados"}</strong><small>{topCrushFloor.crushCount} perfis</small></div>
+        <div>
+          <span>🔥 Mais fofocas</span>
+          <strong>{topGossipFloor.gossipCount > 0 ? topGossipFloor.floor.label : "Sem localização"}</strong>
+          <small>{topGossipFloor.gossipCount} no campus</small>
+        </div>
+        <div>
+          <span>💘 Mais Crushes</span>
+          <strong>{topCrushFloor.crushCount > 0 ? topCrushFloor.floor.label : "Ainda sem dados"}</strong>
+          <small>{topCrushFloor.crushCount} perfis</small>
+        </div>
       </div>
 
       {userCourse && (
         <div className="building-origin-badge">
-          <span>📍 Seu Crush</span>
+          <span>📍 Seu Curso / Perfil</span>
           <strong>{userCourse}</strong>
-          <small>{userFloor ? `Origem estimada: ${userFloor.label}` : "Andar ainda não mapeado"}</small>
+          <small>{userFloor ? `Localizado no: ${userFloor.label}` : "Andar ainda não mapeado"}</small>
         </div>
       )}
 
       <div className="building-floor-list">
-        {floorStats.map(({ floor, gossipCount, crushCount }) => {
+        {floorStats.map(({ floor, gossipCount, crushCount, posts: floorPosts }) => {
           const isUserFloor = userFloor?.floor === floor.floor;
           const isOpen = openFloor === floor.floor;
+          const isFilterActive = selectedFloor === floor.floor;
+
           return (
-            <div key={floor.floor} className={`building-floor ${isUserFloor ? "user-floor" : ""}`}>
-              <button type="button" className="building-floor-button" onClick={() => setOpenFloor(isOpen ? null : floor.floor)} aria-expanded={isOpen}>
+            <div
+              key={floor.floor}
+              className={`building-floor ${isUserFloor ? "user-floor" : ""} ${isFilterActive ? "active-filter" : ""}`}
+            >
+              <button
+                type="button"
+                className="building-floor-button"
+                onClick={() => handleToggleFloor(floor.floor)}
+                aria-expanded={isOpen}
+              >
                 <span className="floor-number">{floor.floor}</span>
                 <span className="floor-label">{floor.label}</span>
-                {isUserFloor && <span className="floor-user-mark" title="Andar estimado pelo seu curso">você</span>}
-                {(gossipCount > 0 || crushCount > 0) && <span className="floor-counts">{gossipCount} 🔥 · {crushCount} 💘</span>}
+                {isUserFloor && <span className="floor-user-mark" title="Andar do seu curso">você</span>}
+                {isFilterActive && <span className="floor-active-mark" title="Feed filtrado neste andar">ativo</span>}
+                {(gossipCount > 0 || crushCount > 0) && (
+                  <span className="floor-counts">
+                    {gossipCount > 0 && <span title={`${gossipCount} fofocas deste andar`}>{gossipCount} 🔥</span>}
+                    {gossipCount > 0 && crushCount > 0 && " · "}
+                    {crushCount > 0 && <span title={`${crushCount} crushes cadastrados`}>{crushCount} 💘</span>}
+                  </span>
+                )}
                 <span className="floor-chevron">{isOpen ? "−" : "+"}</span>
               </button>
+
               {isOpen && (
                 <div className="building-floor-details">
                   <strong>{floor.places.join(" · ")}</strong>
-                  {floor.courses.length > 0 && <span>Cursos: {floor.courses.join(", ")}</span>}
+
+                  {/* Cursos como tags interativas */}
+                  {floor.courses.length > 0 && (
+                    <div style={{ marginTop: "4px" }}>
+                      <span style={{ fontSize: "9px", fontWeight: 800, textTransform: "uppercase", color: "#666" }}>
+                        Cursos (clique para filtrar):
+                      </span>
+                      <div className="floor-course-chips">
+                        {floor.courses.map((course) => {
+                          const isCourseSelected = selectedCourse === course;
+                          return (
+                            <button
+                              key={course}
+                              type="button"
+                              className={`floor-course-chip ${isCourseSelected ? "active" : ""}`}
+                              onClick={() => handleFilterCourse(course)}
+                              title={`Filtrar fofocas de ${course}`}
+                            >
+                              <span>🎓</span>
+                              <span>{course}</span>
+                              {isCourseSelected && <span>✓</span>}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Botão de Ação para Filtrar Todo o Andar */}
+                  <div style={{ marginTop: "8px", display: "flex", gap: "6px" }}>
+                    <button
+                      type="button"
+                      className={`floor-filter-action-btn ${isFilterActive ? "is-active" : ""}`}
+                      onClick={() => handleFilterFloor(floor.floor)}
+                    >
+                      {isFilterActive ? "✕ Desativar Filtro do Andar" : `🔍 Filtrar Feed no ${floor.label}`}
+                    </button>
+                  </div>
+
+                  {/* Prévia de Fofocas Atuais do Andar */}
+                  {floorPosts.length > 0 && (
+                    <div className="floor-recent-posts">
+                      <span style={{ fontSize: "9px", fontWeight: 800, textTransform: "uppercase", color: "#777" }}>
+                        Fofocas recentes deste nível ({floorPosts.length}):
+                      </span>
+                      {floorPosts.slice(0, 3).map((p) => (
+                        <div
+                          key={p.id}
+                          className="floor-post-mini"
+                          onClick={() => handleFilterFloor(floor.floor)}
+                          title="Clique para focar no feed deste andar"
+                        >
+                          <span style={{ fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                            {p.title}
+                          </span>
+                          <span style={{ fontSize: "9px", color: "#888", whiteSpace: "nowrap" }}>
+                            {p.courseName ? p.courseName.split(" ")[0] : "UERJ"}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
             </div>

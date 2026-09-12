@@ -1,7 +1,8 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  output: "standalone",
+  // Standalone é ideal para Docker/Cloud Run/AI Studio, mas na Vercel conflita com o build nativo (.next/next-server.js.nft.json)
+  ...(process.env.VERCEL ? {} : { output: "standalone" }),
   async rewrites() {
     return [
       {

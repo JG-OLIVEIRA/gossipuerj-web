@@ -6,7 +6,7 @@ import { api, ApiError, CrushResponse, Post, PostCategory } from "../lib/api";
 import PostCard from "./components/post-card";
 import SiteFooter from "./components/site-footer";
 import SiteHeader from "./components/site-header";
-import UerjBuildingSidebar from "./components/uerj-building-sidebar";
+import UerjBuildingSidebar, { findFloorForCourse, UERJ_BUILDING_FLOORS } from "./components/uerj-building-sidebar";
 
 const categories: { value: PostCategory; label: string; icon: string }[] = [
   { value: "CONFESSION", label: "Confissão", icon: "🤫" },
@@ -45,6 +45,8 @@ export default function FeedPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string>("ALL");
   const [sortBy, setSortBy] = useState<"recent" | "likes">("recent");
+  const [selectedFloor, setSelectedFloor] = useState<string | null>(null);
+  const [selectedCourseFilter, setSelectedCourseFilter] = useState<string | null>(null);
 
   // Sessão do Usuário
   const [userSession, setUserSession] = useState<{
@@ -250,8 +252,35 @@ export default function FeedPage() {
       const matchesSearch =
         searchQuery.trim() === "" ||
         post.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        post.content.toLowerCase().includes(searchQuery.toLowerCase());
-      return matchesCategory && matchesSearch;
+        post.content.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        Boolean(post.courseName && post.courseName.toLowerCase().includes(searchQuery.toLowerCase()));
+
+      let matchesFloor = true;
+      if (selectedFloor) {
+        const floorObj = UERJ_BUILDING_FLOORS.find((f) => f.floor === selectedFloor);
+        if (floorObj) {
+          const postFloor = findFloorForCourse(post.courseName);
+          if (postFloor?.floor === selectedFloor) {
+            matchesFloor = true;
+          } else {
+            const text = `${post.title} ${post.content}`.toLowerCase();
+            const terms = [...floorObj.courses, ...floorObj.places, floorObj.label].map((t) => t.toLowerCase());
+            matchesFloor = terms.some((term) => term.length > 2 && text.includes(term));
+          }
+        }
+      }
+
+      let matchesCourse = true;
+      if (selectedCourseFilter) {
+        if (post.courseName) {
+          matchesCourse = post.courseName.toLowerCase().includes(selectedCourseFilter.toLowerCase()) ||
+            selectedCourseFilter.toLowerCase().includes(post.courseName.toLowerCase());
+        } else {
+          matchesCourse = `${post.title} ${post.content}`.toLowerCase().includes(selectedCourseFilter.toLowerCase());
+        }
+      }
+
+      return matchesCategory && matchesSearch && matchesFloor && matchesCourse;
     });
 
     if (sortBy === "likes") {
@@ -264,7 +293,7 @@ export default function FeedPage() {
 
     // Default: Mais recentes
     return [...result].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-  }, [posts, selectedCategory, searchQuery, sortBy, postLikesMap]);
+  }, [posts, selectedCategory, searchQuery, sortBy, postLikesMap, selectedFloor, selectedCourseFilter]);
 
   // Contagem por categoria
   const categoryCounts = useMemo(() => {
@@ -564,6 +593,33 @@ export default function FeedPage() {
 
             {/* Coluna Principal: Feed de Postagens */}
             <main className="feed-stream">
+              {/* Alerta de filtro ativo por andar ou curso */}
+              {(selectedFloor || selectedCourseFilter) && (
+                <div className="feed-active-filter-alert">
+                  <div style={{ display: "flex", alignItems: "center", gap: "10px", minWidth: 0 }}>
+                    <span style={{ fontSize: "20px" }}>🏛️</span>
+                    <div>
+                      <div style={{ fontSize: "10px", fontWeight: 800, textTransform: "uppercase", color: "#555" }}>
+                        Filtro de Localização / Andar:
+                      </div>
+                      <strong style={{ fontSize: "13px", color: "var(--ink)" }}>
+                        {selectedCourseFilter ? `Curso: ${selectedCourseFilter}` : `Andar: ${selectedFloor}º Andar (${UERJ_BUILDING_FLOORS.find(f => f.floor === selectedFloor)?.label})`}
+                      </strong>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    className="feed-clear-filter-btn"
+                    onClick={() => {
+                      setSelectedFloor(null);
+                      setSelectedCourseFilter(null);
+                    }}
+                  >
+                    ✕ Ver Todos
+                  </button>
+                </div>
+              )}
+
               {isLoading ? (
                 <div className="feed-loading" role="status" style={{ padding: "40px", textAlign: "center" }}>
                   <div className="loading-spinner" style={{ margin: "0 auto 16px" }} />
@@ -583,7 +639,7 @@ export default function FeedPage() {
                       ? "Seja o primeiro a soltar um babado anônimo no campus preenchendo a caixa acima!"
                       : "Tente limpar os filtros ou pesquisar por outros termos como 'elevador' ou 'bandejão'."}
                   </p>
-                  {(searchQuery || selectedCategory !== "ALL") && (
+                  {(searchQuery || selectedCategory !== "ALL" || selectedFloor || selectedCourseFilter) && (
                     <button
                       type="button"
                       className="pink-button"
@@ -591,6 +647,8 @@ export default function FeedPage() {
                       onClick={() => {
                         setSearchQuery("");
                         setSelectedCategory("ALL");
+                        setSelectedFloor(null);
+                        setSelectedCourseFilter(null);
                       }}
                     >
                       LIMPAR FILTROS
@@ -607,6 +665,11 @@ export default function FeedPage() {
                     onDelete={handleDelete}
                     isDeleting={deletingPostId === post.id}
                     onError={setError}
+                    onSelectCourse={(course) => {
+                      setSelectedCourseFilter(course);
+                      setSelectedFloor(null);
+                      triggerToast(`Filtrando fofocas de ${course}`, "🎓");
+                    }}
                   />
                 ))
               )}
@@ -637,7 +700,27 @@ export default function FeedPage() {
             {/* Coluna Lateral: Radar do Campus UERJ */}
             <aside className="campus-sidebar">
 
-              <UerjBuildingSidebar userCourse={userCrushCourse} posts={posts} crushes={buildingCrushes} />
+              <UerjBuildingSidebar
+                userCourse={userCrushCourse}
+                posts={posts}
+                crushes={buildingCrushes}
+                selectedFloor={selectedFloor}
+                onSelectFloor={(floor) => {
+                  setSelectedFloor(floor);
+                  if (floor) {
+                    setSelectedCourseFilter(null);
+                    triggerToast(`Feed filtrado no ${floor}º andar`, "🏛️");
+                  }
+                }}
+                selectedCourse={selectedCourseFilter}
+                onSelectCourse={(course) => {
+                  setSelectedCourseFilter(course);
+                  if (course) {
+                    setSelectedFloor(null);
+                    triggerToast(`Feed filtrado por ${course}`, "🎓");
+                  }
+                }}
+              />
 
 
               {/* CARD 2: Estatuto do Fofoqueiro UERJ */}

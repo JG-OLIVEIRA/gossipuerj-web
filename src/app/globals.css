@@ -1563,6 +1563,34 @@ article.post-card {
   overflow: hidden;
 }
 
+.building-active-filter-bar {
+  background: var(--yellow);
+  border: 2px solid var(--ink);
+  box-shadow: 2px 2px 0 var(--ink);
+  padding: 8px 10px;
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.clear-building-filter-btn {
+  background: var(--pink);
+  color: #fff;
+  border: 1.5px solid var(--ink);
+  font-size: 10px;
+  font-weight: 800;
+  padding: 3px 8px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: transform 0.1s ease;
+}
+
+.clear-building-filter-btn:hover {
+  transform: translate(-1px, -1px);
+}
+
 .building-sidebar-intro,
 .building-source-note {
   color: #666;
@@ -1648,6 +1676,22 @@ article.post-card {
   background: var(--yellow);
 }
 
+.building-floor.active-filter .building-floor-button {
+  background: #fff4c7;
+  border-left: 6px solid var(--pink);
+  font-weight: 900;
+}
+
+.floor-active-mark {
+  background: var(--yellow);
+  border: 1.5px solid var(--ink);
+  color: var(--ink);
+  font-size: 8px;
+  font-weight: 900;
+  padding: 1px 4px;
+  text-transform: uppercase;
+}
+
 .floor-number {
   align-items: center;
   background: var(--ink);
@@ -1693,9 +1737,9 @@ article.post-card {
   border-left: 4px solid var(--pink);
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  gap: 6px;
   margin-left: 4px;
-  padding: 8px 10px 9px 38px;
+  padding: 10px 10px 10px 38px;
 }
 
 .building-floor-details strong,
@@ -1707,6 +1751,151 @@ article.post-card {
 
 .building-floor-details strong {
   color: var(--ink);
+}
+
+.floor-course-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.floor-course-chip {
+  background: #f5f5f5;
+  border: 1px solid var(--ink);
+  font-size: 9px;
+  font-weight: 700;
+  padding: 3px 6px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  transition: all 0.1s ease;
+}
+
+.floor-course-chip:hover {
+  background: var(--yellow);
+  transform: translateY(-1px);
+}
+
+.floor-course-chip.active {
+  background: var(--yellow);
+  font-weight: 900;
+  border-width: 2px;
+  box-shadow: 1px 1px 0 var(--ink);
+}
+
+.floor-filter-action-btn {
+  background: var(--ink);
+  color: var(--yellow);
+  border: 2px solid var(--ink);
+  font-size: 10px;
+  font-weight: 800;
+  padding: 5px 10px;
+  cursor: pointer;
+  text-transform: uppercase;
+  transition: all 0.1s ease;
+  width: 100%;
+  text-align: center;
+}
+
+.floor-filter-action-btn:hover {
+  transform: translate(-1px, -1px);
+  box-shadow: 2px 2px 0 var(--ink);
+}
+
+.floor-filter-action-btn.is-active {
+  background: var(--pink);
+  color: #fff;
+}
+
+.floor-recent-posts {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px dashed #ddd;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.floor-post-mini {
+  background: #fafafa;
+  border: 1px solid #e0e0e0;
+  padding: 4px 6px;
+  font-size: 10px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  transition: background 0.1s ease, border-color 0.1s ease;
+}
+
+.floor-post-mini:hover {
+  background: #fff8d6;
+  border-color: var(--ink);
+}
+
+/* Tag de Curso no PostCard */
+.post-course-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: #fffbe6;
+  border: 1.5px solid var(--ink);
+  padding: 3px 8px;
+  font-size: 10px;
+  font-weight: 800;
+  cursor: pointer;
+  color: var(--ink);
+  transition: all 0.12s ease;
+  text-transform: uppercase;
+}
+
+.post-course-tag:hover {
+  background: var(--yellow);
+  transform: translateY(-1px);
+  box-shadow: 2px 2px 0 var(--ink);
+}
+
+.post-course-floor-pill {
+  background: var(--ink);
+  color: #fff;
+  padding: 1px 4px;
+  font-size: 8px;
+  font-family: 'DM Mono', monospace;
+  font-weight: 900;
+}
+
+/* Alerta de Filtro Ativo no Feed */
+.feed-active-filter-alert {
+  background: var(--yellow);
+  border: 3px solid var(--ink);
+  box-shadow: 4px 4px 0 var(--ink);
+  padding: 10px 14px;
+  margin-bottom: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.feed-clear-filter-btn {
+  background: var(--pink);
+  color: #fff;
+  border: 2px solid var(--ink);
+  box-shadow: 2px 2px 0 var(--ink);
+  font-size: 11px;
+  font-weight: 900;
+  padding: 6px 12px;
+  cursor: pointer;
+  text-transform: uppercase;
+  transition: transform 0.1s ease;
+}
+
+.feed-clear-filter-btn:hover {
+  transform: translate(-1px, -1px);
 }
 
 .building-source-note {
