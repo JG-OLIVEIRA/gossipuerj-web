@@ -43,6 +43,7 @@ export type GrantedAuthority = {
 export type User = {
   id?: string;
   username: string;
+  course?: Course;
   email: string;
   password?: string;
   verificationCode?: string;
@@ -61,6 +62,7 @@ export type User = {
 
 export type UserResponse = {
   username?: string;
+  courseName?: string;
   email?: string;
   gender?: Gender;
   orientation?: Orientation;
@@ -70,6 +72,7 @@ export type UserResponse = {
 
 export type UpdateUserRequest = {
   username: string;
+  courseName: string;
   email: string;
 };
 
@@ -94,6 +97,7 @@ export type PostRequest = {
 export type PostResponse = {
   id: string;
   title: string;
+  courseName?: string;
   content: string;
   category: PostCategory;
   createdAt: string;
@@ -167,6 +171,7 @@ export type LoginResponse = {
 
 export type RegisterUserRequest = {
   username: string;
+  courseName: string;
   email: string;
   password: string;
   // Optional backwards compatibility fields if provided by UI
@@ -206,19 +211,19 @@ export type Crush = {
 
 export type CrushRequest = {
   photoUrl: string;
-  courseName: string;
   description: string;
   gender: Gender;
   orientation: Orientation;
+  courseName?: string;
 };
 
 export type CrushResponse = {
   id: string;
   photoUrl: string;
-  courseName: string;
   description: string;
   gender: Gender;
   orientation: Orientation;
+  courseName?: string;
 };
 
 // Match schemas
@@ -437,18 +442,30 @@ export const api = {
   },
 
   createCrush(token: string, data: CrushRequest): Promise<CrushResponse> {
+    const payload = {
+      photoUrl: data.photoUrl,
+      description: data.description,
+      gender: data.gender,
+      orientation: data.orientation,
+    };
     return request<CrushResponse>("/api/v1/crushes", {
       method: "POST",
       headers: { Authorization: `Bearer ${token}` },
-      body: JSON.stringify(data),
+      body: JSON.stringify(payload),
     });
   },
 
   updateCrush(token: string, data: CrushRequest): Promise<CrushResponse> {
+    const payload = {
+      photoUrl: data.photoUrl,
+      description: data.description,
+      gender: data.gender,
+      orientation: data.orientation,
+    };
     return request<CrushResponse>("/api/v1/crushes", {
       method: "PUT",
       headers: { Authorization: `Bearer ${token}` },
-      body: JSON.stringify(data),
+      body: JSON.stringify(payload),
     });
   },
 
@@ -575,6 +592,7 @@ export const api = {
   register(data: RegisterUserRequest): Promise<void> {
     const payload = {
       username: data.username,
+      courseName: data.courseName,
       email: data.email,
       password: data.password,
     };
@@ -628,10 +646,15 @@ export const api = {
   },
 
   updateUser(token: string, data: UpdateUserRequest): Promise<void> {
+    const payload = {
+      username: data.username,
+      courseName: data.courseName,
+      email: data.email,
+    };
     return request<void>("/api/v1/auth/update", {
       method: "PUT",
       headers: { Authorization: `Bearer ${token}` },
-      body: JSON.stringify(data),
+      body: JSON.stringify(payload),
     });
   },
 };

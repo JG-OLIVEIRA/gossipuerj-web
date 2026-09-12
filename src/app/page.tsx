@@ -92,9 +92,23 @@ export default function FeedPage() {
       if (token) {
         try {
           const myCrush = await api.getMyCrush(token);
-          if (active) setUserCrushCourse(myCrush.courseName);
+          if (active && myCrush?.courseName) {
+            setUserCrushCourse(myCrush.courseName);
+          } else {
+            const me = await api.me(token);
+            if (active && me?.courseName) setUserCrushCourse(me.courseName);
+          }
         } catch {
-          if (active) setUserCrushCourse(null);
+          try {
+            const me = await api.me(token);
+            if (active && me?.courseName) {
+              setUserCrushCourse(me.courseName);
+            } else if (active) {
+              setUserCrushCourse(null);
+            }
+          } catch {
+            if (active) setUserCrushCourse(null);
+          }
         }
         try {
           const crushPage = await api.getAllCrushes(0, 100, undefined, token);

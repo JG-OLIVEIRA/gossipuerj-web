@@ -4,6 +4,7 @@ import { FormEvent, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { api, ApiError, UserResponse } from "../../lib/api";
+import { UERJ_COURSES_BY_AREA } from "../../lib/uerj-courses";
 import SiteFooter from "../components/site-footer";
 import SiteHeader from "../components/site-header";
 
@@ -106,9 +107,17 @@ export default function LoginPage() {
 
       const inputUsername = String(form.get("username") ?? "").trim();
       const username = inputUsername || email.split("@")[0] || "uerjiano";
+      const courseName = String(form.get("courseName") ?? "").trim();
+
+      if (!courseName) {
+        setError("Por favor, selecione seu curso de graduação da UERJ.");
+        setIsSubmitting(false);
+        return;
+      }
 
       await api.register({
         username,
+        courseName,
         email,
         password: String(form.get("password") ?? ""),
       });
@@ -277,13 +286,38 @@ export default function LoginPage() {
           ) : (
             <>
               {mode === "register" && (
-                <label>
-                  Seu @ do Instagram
-                  <input name="username" type="text" placeholder="ex: jorgeuerj (opcional)" aria-describedby="instagram-username-help" onInput={clearFieldValidity} />
-                  <small id="instagram-username-help" className="field-help-text">
-                    Será liberado para a outra pessoa somente depois que vocês derem match.
-                  </small>
-                </label>
+                <>
+                  <label>
+                    Seu @ do Instagram
+                    <input name="username" type="text" placeholder="ex: jorgeuerj (opcional)" aria-describedby="instagram-username-help" onInput={clearFieldValidity} />
+                    <small id="instagram-username-help" className="field-help-text">
+                      Será liberado para a outra pessoa somente depois que vocês derem match.
+                    </small>
+                  </label>
+                  <label>
+                    Seu Curso na UERJ *
+                    <select
+                      name="courseName"
+                      required
+                      defaultValue=""
+                      onInvalid={handleRequiredFieldInvalid}
+                      onInput={clearFieldValidity}
+                    >
+                      <option value="" disabled>
+                        Selecione seu curso de graduação...
+                      </option>
+                      {Object.entries(UERJ_COURSES_BY_AREA).map(([area, courses]) => (
+                        <optgroup key={area} label={`Área: ${area}`}>
+                          {courses.map((course) => (
+                            <option key={course} value={course}>
+                              {course}
+                            </option>
+                          ))}
+                        </optgroup>
+                      ))}
+                    </select>
+                  </label>
+                </>
               )}
               <label>
                 Email institucional

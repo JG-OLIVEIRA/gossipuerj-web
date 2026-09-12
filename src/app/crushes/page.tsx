@@ -534,7 +534,7 @@ export default function CrushesPage() {
                             /* eslint-disable-next-line @next/next/no-img-element */
                             <img
                               src={getPrivatePhotoUrl(activeCrush.photoUrl)}
-                              alt={`Crush de ${activeCrush.courseName}`}
+                              alt={activeCrush.courseName ? `Crush de ${activeCrush.courseName}` : "Crush da UERJ"}
                               className="crush-card-img"
                               onError={(e) => {
                                 // Fallback visual limpo se imagem quebrar
@@ -543,12 +543,14 @@ export default function CrushesPage() {
                             />
                           ) : (
                             <div className="crush-card-avatar-fallback" style={{ background: "var(--yellow)" }}>
-                              {activeCrush.courseName.charAt(0).toUpperCase()}
+                              {(activeCrush.courseName?.charAt(0) || "U").toUpperCase()}
                             </div>
                           )}
-                          <span className="crush-card-course-badge">
-                            {activeCrush.courseName}
-                          </span>
+                          {activeCrush.courseName && (
+                            <span className="crush-card-course-badge">
+                              {activeCrush.courseName}
+                            </span>
+                          )}
                         </div>
 
                         <div className="crush-card-body">

@@ -3,8 +3,12 @@ import "./globals.css";
 import "./photo-background.css";
 
 export const metadata: Metadata = {
-  title: "Gossip UERJ | A fonte não oficial do campus",
+  title: "Gossip UERJ",
   description: "Os bastidores, encontros e babados da UERJ.",
+  openGraph: {
+    title: "Gossip UERJ",
+    description: "Os bastidores, encontros e babados da UERJ.",
+  },
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

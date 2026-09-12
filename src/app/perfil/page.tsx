@@ -4,6 +4,7 @@ import { FormEvent, useEffect, useState, useMemo } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { api, ApiError, Post, UserResponse } from "../../lib/api";
+import { UERJ_COURSES_BY_AREA } from "../../lib/uerj-courses";
 import PostCard from "../components/post-card";
 import SiteFooter from "../components/site-footer";
 import SiteHeader from "../components/site-header";
@@ -74,6 +75,7 @@ export default function PerfilPage() {
   const [isEditingAccount, setIsEditingAccount] = useState(false);
   const [accountUsername, setAccountUsername] = useState("");
   const [accountEmail, setAccountEmail] = useState("");
+  const [accountCourseName, setAccountCourseName] = useState("");
   const [isUpdatingAccount, setIsUpdatingAccount] = useState(false);
   const [toast, setToast] = useState<{ message: string; icon: string } | null>(null);
 
@@ -111,6 +113,7 @@ export default function PerfilPage() {
         setProfileEmail(user.email ?? savedEmail);
         setAccountUsername(user.username ?? savedEmail.split("@")[0] ?? "uerjiano");
         setAccountEmail(user.email ?? savedEmail);
+        setAccountCourseName(user.courseName ?? "");
 
         try {
           const postsPage = await api.myPosts(token);
@@ -156,6 +159,7 @@ export default function PerfilPage() {
           setProfile({
             username: savedEmail.split("@")[0] || "uerjiano",
             email: savedEmail || "estudante@graduacao.uerj.br",
+            courseName: "Graduação UERJ",
           });
           setAuthenticated(true);
         }
@@ -189,16 +193,22 @@ export default function PerfilPage() {
     const token = localStorage.getItem("gossipuerj_token");
     const username = accountUsername.trim().replace(/^@/, "");
     const email = accountEmail.trim();
-    if (!token || !username || !email || isUpdatingAccount) return;
+    const courseName = accountCourseName.trim();
+    if (!token || !username || !email || !courseName || isUpdatingAccount) {
+      if (!courseName) {
+        triggerToast("Por favor selecione seu curso da UERJ.", "⚠️");
+      }
+      return;
+    }
 
     setIsUpdatingAccount(true);
     try {
-      await api.updateUser(token, { username, email });
-      setProfile((current) => ({ ...current, username, email }));
+      await api.updateUser(token, { username, email, courseName });
+      setProfile((current) => ({ ...current, username, email, courseName }));
       setProfileEmail(email);
       localStorage.setItem("gossipuerj_email", email);
       setIsEditingAccount(false);
-      triggerToast("Dados da conta atualizados.", "✓");
+      triggerToast("Dados da conta atualizados com sucesso.", "✓");
     } catch (error) {
       triggerToast(error instanceof ApiError ? error.message : "Não foi possível atualizar seus dados.", "⚠️");
     } finally {
@@ -395,6 +405,11 @@ export default function PerfilPage() {
                     <span className="verified-chip" title="E-mail universitário verificado">
                       ✓ UERJ Verificado
                     </span>
+                    {(profile?.courseName || accountCourseName) && (
+                      <span className="verified-chip" style={{ background: "var(--yellow)", color: "var(--ink)", borderColor: "var(--ink)" }}>
+                        🎓 {profile?.courseName || accountCourseName}
+                      </span>
+                    )}
                   </div>
                   <button type="button" className="profile-edit-account-btn" onClick={() => setIsEditingAccount((current) => !current)}>
                     {isEditingAccount ? "Fechar edição" : "Editar conta"}
@@ -439,11 +454,30 @@ export default function PerfilPage() {
               <form className="profile-account-editor" onSubmit={handleUpdateAccount}>
                 <div>
                   <strong>Editar dados da conta</strong>
-                  <small>O email institucional foi necessário para criar e verificar sua conta. Depois disso, você pode usar outro email.</small>
+                  <small>Atualize seu @, e-mail de contato e curso de graduação oficial na UERJ.</small>
                 </div>
                 <label>
                   @ do Instagram
                   <input value={accountUsername} onChange={(event) => setAccountUsername(event.target.value)} required />
+                </label>
+                <label>
+                  Curso de Graduação na UERJ *
+                  <select
+                    value={accountCourseName}
+                    onChange={(event) => setAccountCourseName(event.target.value)}
+                    required
+                  >
+                    <option value="" disabled>Selecione seu curso oficial...</option>
+                    {Object.entries(UERJ_COURSES_BY_AREA).map(([area, courses]) => (
+                      <optgroup key={area} label={`Área: ${area}`}>
+                        {courses.map((course) => (
+                          <option key={course} value={course}>
+                            {course}
+                          </option>
+                        ))}
+                      </optgroup>
+                    ))}
+                  </select>
                 </label>
                 <label>
                   Email para contato
@@ -534,12 +568,29 @@ export default function PerfilPage() {
                       </span>
                     </div>
 
+                    <div className="carteirinha-field">
+                      <small>CURSO DE GRADUAÇÃO</small>
+                      <strong title={profile?.courseName || accountCourseName || "Graduação UERJ"}>
+                        {profile?.courseName || accountCourseName || "Graduação UERJ"}
+                      </strong>
+                    </div>
+
                     <div className="carteirinha-badges">
                       <span className="carteirinha-badge yellow">
-                        {profile?.gender ? genderLabels[profile.gender] ?? profile.gender : "Gênero Discente"}
+                        🎓 {profile?.courseName ? profile.courseName.split(" - ")[0] : "Discente UERJ"}
                       </span>
+                      {profile?.gender && (
+                        <span className="carteirinha-badge cyan">
+                          {genderLabels[profile.gender] ?? profile.gender}
+                        </span>
+                      )}
+                      {profile?.orientation && (
+                        <span className="carteirinha-badge yellow">
+                          {orientationLabels[profile.orientation] ?? profile.orientation}
+                        </span>
+                      )}
                       <span className="carteirinha-badge cyan">
-                        {profile?.orientation ? orientationLabels[profile.orientation] ?? profile.orientation : "Orientação"}
+                        🏛️ Pavilhão João Lyra
                       </span>
                     </div>
                   </div>
