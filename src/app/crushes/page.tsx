@@ -10,6 +10,7 @@ import {
   Gender,
   MatchResponse,
   Orientation,
+  UserResponse,
 } from "../../lib/api";
 import SiteFooter from "../components/site-footer";
 import SiteHeader from "../components/site-header";
@@ -51,6 +52,7 @@ export default function CrushesPage() {
   const [deckIndex, setDeckIndex] = useState(0);
 
   const [token, setToken] = useState<string | null>(null);
+  const [accountProfile, setAccountProfile] = useState<UserResponse | null>(null);
   const [activeTab, setActiveTab] = useState<"gallery" | "received">("gallery");
   const [accessState, setAccessState] = useState<"loading" | "unauthenticated" | "no-crush" | "ready">("loading");
 
@@ -62,6 +64,7 @@ export default function CrushesPage() {
 
   // Modal de cadastro de perfil
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isEditingCrush, setIsEditingCrush] = useState(false);
   const [isSubmittingCrush, setIsSubmittingCrush] = useState(false);
   const [modalError, setModalError] = useState("");
 
@@ -78,6 +81,18 @@ export default function CrushesPage() {
     setIsUploadingPhoto(false);
     setUploadSuccessMessage("");
     setModalError("");
+    setIsEditingCrush(false);
+  }
+
+  function openEditCrushModal() {
+    const currentCrush = crushes.find((crush) => crush.id === myCrushId);
+    if (!currentCrush) return;
+    setIsEditingCrush(true);
+    setPhotoUrl(currentCrush.photoUrl || "");
+    setPhotoPreview(currentCrush.photoUrl ? getPrivatePhotoUrl(currentCrush.photoUrl) : null);
+    setUploadSuccessMessage("");
+    setModalError("");
+    setIsModalOpen(true);
   }
 
   async function uploadToVercelBlob(file: File) {
@@ -156,6 +171,13 @@ export default function CrushesPage() {
       setIsLoadingCrushes(true);
       setCrushError("");
       try {
+        try {
+          const account = await api.me(savedToken);
+          if (active) setAccountProfile(account);
+        } catch {
+          const savedEmail = localStorage.getItem("gossipuerj_email") ?? "";
+          if (active && savedEmail) setAccountProfile({ email: savedEmail, username: savedEmail.split("@")[0] });
+        }
         const myCrush = await api.getMyCrush(savedToken);
         setMyCrushId(myCrush.id);
         setMyCrushPhotoUrl(myCrush.photoUrl);
@@ -308,14 +330,19 @@ export default function CrushesPage() {
     }
 
     try {
-      const newCrush = await api.createCrush(token, payload);
-      setCrushes((prev) => [newCrush, ...prev]);
-      setMyCrushId(newCrush.id);
-      setMyCrushPhotoUrl(newCrush.photoUrl);
+      const savedCrush = isEditingCrush
+        ? await api.updateCrush(token, payload)
+        : await api.createCrush(token, payload);
+      setCrushes((prev) => isEditingCrush
+        ? prev.map((crush) => (crush.id === savedCrush.id ? savedCrush : crush))
+        : [savedCrush, ...prev]);
+      setMyCrushId(savedCrush.id);
+      setMyCrushPhotoUrl(savedCrush.photoUrl);
       setAccessState("ready");
+      const wasEditingCrush = isEditingCrush;
       resetModalForm();
       setIsModalOpen(false);
-      showToast("Seu perfil de Crush foi publicado na vitrine da UERJ!", "✨");
+      showToast(wasEditingCrush ? "Seu perfil de Crush foi atualizado!" : "Seu perfil de Crush foi publicado na vitrine da UERJ!", "✨");
     } catch (err) {
       setModalError(getCrushErrorMessage(err, "Não foi possível publicar seu perfil. Confira os dados e tente novamente."));
     } finally {
@@ -395,7 +422,8 @@ export default function CrushesPage() {
                         <span className="crush-mock-course">Ciência da Computação</span>
                         <span className="crush-mock-badge">♥ Match</span>
                       </div>
-                      <h3>“Sempre aparece no pavilhão cedo, e eu sempre fico sem coragem.”</h3>
+                      <span className="crush-mock-bio-label">SOBRE MIM</span>
+                      <h3>Sempre estou no pavilhão cedo e adoro uma boa conversa depois da aula.</h3>
                       <div className="crush-mock-tags">
                         <span>Feminino</span>
                         <span>Bissexual</span>
@@ -514,6 +542,21 @@ export default function CrushesPage() {
 
       <main className="pink-page inner-page">
         <div className="crushes-container">
+          <div className="crush-account-strip">
+            <div className="crush-account-avatar">
+              {(accountProfile?.username || accountProfile?.email || "U").charAt(0).toUpperCase()}
+            </div>
+            <div className="crush-account-copy">
+              <span className="crush-account-kicker">SEU PERFIL NA GALERIA</span>
+              <strong>@{accountProfile?.username || accountProfile?.email?.split("@")[0] || "estudante"}</strong>
+              <small>{accountProfile?.courseName || "Estudante da UERJ"}</small>
+            </div>
+            <div className="crush-account-actions">
+              <button type="button" className="crush-account-edit-btn" onClick={openEditCrushModal}>EDITAR CRUSH</button>
+              <Link className="crush-account-edit-link" href="/perfil">EDITAR CONTA</Link>
+            </div>
+          </div>
+
           {/* Título & Hero */}
           <div style={{ textAlign: "center", marginBottom: "28px" }}>
             <h1 style={{ color: "#fff", fontSize: "clamp(36px, 5vw, 64px)", letterSpacing: "-0.06em", margin: "0 0 10px", textShadow: "4px 4px 0 var(--ink)" }}>
@@ -707,9 +750,11 @@ export default function CrushesPage() {
               ✕
             </button>
 
-            <h2 className="crush-modal-title">Cadastrar Perfil de Crush</h2>
+            <h2 className="crush-modal-title">{isEditingCrush ? "Editar Perfil de Crush" : "Cadastrar Perfil de Crush"}</h2>
             <p className="crush-modal-subtitle">
-              Adicione suas informações para aparecer na vitrine de crushes da UERJ e receber matches de outros alunos.
+              {isEditingCrush
+                ? "Atualize sua foto, descrição e preferências exibidas na vitrine de Crushes."
+                : "Adicione suas informações para aparecer na vitrine de crushes da UERJ e receber matches de outros alunos."}
             </p>
 
             {modalError && (
@@ -797,6 +842,7 @@ export default function CrushesPage() {
                 Descrição / Fofoca sobre você *
                 <textarea
                   name="description"
+                  defaultValue={isEditingCrush ? crushes.find((crush) => crush.id === myCrushId)?.description : ""}
                   placeholder="Ex: Alguém do 6º andar me notou na aula de Introdução? Sempre no pilotis ou na choppada..."
                   required
                 />
@@ -805,7 +851,7 @@ export default function CrushesPage() {
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
                 <label>
                   Gênero
-                  <select name="gender" defaultValue="OTHER">
+                    <select name="gender" defaultValue={isEditingCrush ? crushes.find((crush) => crush.id === myCrushId)?.gender : "OTHER"}>
                     <option value="FEMALE">Feminino</option>
                     <option value="MALE">Masculino</option>
                     <option value="TRANSGENDER">Transgênero</option>
@@ -816,7 +862,7 @@ export default function CrushesPage() {
 
                 <label>
                   Orientação
-                  <select name="orientation" defaultValue="BISEXUAL">
+                    <select name="orientation" defaultValue={isEditingCrush ? crushes.find((crush) => crush.id === myCrushId)?.orientation : "BISEXUAL"}>
                     <option value="HETEROSEXUAL">Heterossexual</option>
                     <option value="HOMOSEXUAL">Homossexual</option>
                     <option value="BISEXUAL">Bissexual</option>
@@ -827,7 +873,7 @@ export default function CrushesPage() {
               </div>
 
               <button type="submit" className="crush-modal-submit" disabled={isSubmittingCrush}>
-                {isSubmittingCrush ? "PUBLICANDO..." : "PUBLICAR MEU PERFIL DE CRUSH"}
+                {isSubmittingCrush ? (isEditingCrush ? "SALVANDO..." : "PUBLICANDO...") : isEditingCrush ? "SALVAR ALTERAÇÕES" : "PUBLICAR MEU PERFIL DE CRUSH"}
               </button>
             </form>
           </div>

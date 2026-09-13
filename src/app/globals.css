@@ -2224,6 +2224,106 @@ article.post-card {
   width: 100%;
 }
 
+.crush-account-strip {
+  align-items: center;
+  background: #fffdf8;
+  border: 4px solid var(--ink);
+  box-shadow: 6px 6px 0 var(--ink);
+  display: flex;
+  gap: 12px;
+  margin: 0 auto 24px;
+  max-width: 680px;
+  padding: 10px 14px;
+}
+
+.crush-account-avatar {
+  align-items: center;
+  background: var(--cyan);
+  border: 3px solid var(--ink);
+  box-shadow: 3px 3px 0 var(--ink);
+  display: flex;
+  flex: 0 0 42px;
+  font-size: 20px;
+  font-weight: 900;
+  height: 42px;
+  justify-content: center;
+  width: 42px;
+}
+
+.crush-account-copy {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.crush-account-kicker {
+  color: #666;
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  line-height: 1.2;
+}
+
+.crush-account-copy strong {
+  font-size: 14px;
+  line-height: 1.25;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.crush-account-copy small {
+  color: #555;
+  font-size: 10px;
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.crush-account-status {
+  background: var(--yellow);
+  border: 2px solid var(--ink);
+  font-size: 9px;
+  font-weight: 900;
+  padding: 6px 8px;
+  white-space: nowrap;
+}
+
+.crush-account-actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
+.crush-account-edit-btn,
+.crush-account-edit-link {
+  border: 2px solid var(--ink);
+  cursor: pointer;
+  font-size: 9px;
+  font-weight: 900;
+  padding: 6px 8px;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.crush-account-edit-btn {
+  background: var(--yellow);
+}
+
+.crush-account-edit-link {
+  background: #fff;
+  color: var(--ink);
+}
+
+.crush-account-edit-btn:hover,
+.crush-account-edit-link:hover {
+  background: var(--cyan);
+}
+
 .crushes-header-bar {
   display: flex;
   justify-content: space-between;
@@ -2954,6 +3054,15 @@ article.post-card {
   padding: 5px 8px;
 }
 
+.crush-mock-bio-label {
+  color: #666;
+  display: block;
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  margin-bottom: 5px;
+}
+
 .crush-mock-body h3 {
   font-size: 17px;
   letter-spacing: -0.04em;
@@ -3195,6 +3304,54 @@ article.post-card {
   .site-nav::-webkit-scrollbar { display:none; }
   .site-nav a { flex:0 0 auto; font-size:10px; padding:9px 10px; }
   .pink-page { overflow-x:hidden; padding:32px 5vw; }
+  .feed-public-landing,
+  .crush-public-landing { gap: 18px; }
+  .feed-public-hero,
+  .crush-public-hero {
+    gap: 22px;
+    grid-template-columns: 1fr;
+    padding: 18px 14px 20px;
+  }
+  .feed-public-hero-copy h1,
+  .crush-public-hero-copy h1 {
+    font-size: clamp(34px, 10vw, 44px);
+    line-height: 0.96;
+    margin: 14px 0 12px;
+  }
+  .feed-public-hero-copy p,
+  .crush-public-hero-copy p {
+    font-size: 13px;
+    line-height: 1.45;
+    margin-bottom: 18px;
+  }
+  .feed-login-gate-actions { width: 100%; }
+  .feed-login-gate-actions .pink-button {
+    max-width: none;
+    padding: 14px 12px;
+    width: 100%;
+  }
+  .public-proof-list { gap: 8px; margin-top: 16px; }
+  .public-proof-list li { font-size: 11px; padding: 8px 9px; }
+  .feed-public-preview,
+  .crush-public-preview { padding: 0 4px; }
+  .preview-panel { padding: 10px; }
+  .preview-post-card { padding: 12px; }
+  .preview-post-card h3 { font-size: 16px; }
+  .preview-mini-grid { gap: 8px; }
+  .preview-mini-card { min-height: 86px; padding: 10px 8px; }
+  .preview-mini-card strong { font-size: 12px; }
+  .feature-showcase-grid { grid-template-columns: 1fr 1fr; gap: 10px; }
+  .feature-showcase-card { padding: 14px 12px; }
+  .feature-icon { font-size: 22px; height: 44px; width: 44px; }
+  .feature-showcase-card h2 { font-size: 16px; margin: 12px 0 7px; }
+  .feature-showcase-card p { font-size: 11px; line-height: 1.4; }
+  .feed-public-proof-bar {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 8px;
+    padding: 12px 14px;
+  }
+  .feed-public-proof-bar span { font-size: 10px; }
   .feed-intro { align-items:flex-start; flex-direction:column; gap:35px; }
   .feed-intro h1 { font-size:48px; }
   .yellow-label { font-size:11px; }
@@ -3289,6 +3446,27 @@ article.post-card {
   .building-floor-details { padding-left: 34px; }
 
   .crushes-container { min-width: 0; }
+  .crush-account-strip {
+    gap: 10px;
+    margin-bottom: 18px;
+    padding: 9px 10px;
+  }
+  .crush-account-avatar {
+    flex-basis: 38px;
+    font-size: 17px;
+    height: 38px;
+    width: 38px;
+  }
+  .crush-account-copy strong { font-size: 13px; }
+  .crush-account-actions { align-items: stretch; flex-direction: column; }
+  .crush-account-edit-btn,
+  .crush-account-edit-link { font-size: 8px; padding: 5px 6px; }
+  .crush-mock-card { max-width: 340px; }
+  .crush-mock-photo { height: 190px; }
+  .crush-mock-body { padding: 13px 12px 15px; }
+  .crush-mock-header { align-items: flex-start; flex-direction: column; gap: 7px; }
+  .crush-mock-body h3 { font-size: 15px; }
+  .crush-public-card-btn { min-height: 46px; }
   .crushes-header-bar { align-items: stretch; }
   .crushes-tabs { display: grid; grid-template-columns: 1fr; gap: 8px; width: 100%; }
   .crush-tab-btn { justify-content: space-between; min-height: 48px; padding: 11px 12px; text-align: left; width: 100%; }
