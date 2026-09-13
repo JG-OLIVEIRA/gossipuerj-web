@@ -2284,6 +2284,16 @@ article.post-card {
   white-space: nowrap;
 }
 
+.crush-account-tabs {
+  flex-shrink: 0;
+}
+
+.crush-account-tabs .crush-tab-btn {
+  box-shadow: 3px 3px 0 var(--ink);
+  font-size: 10px;
+  padding: 7px 9px;
+}
+
 .crush-account-status {
   background: var(--yellow);
   border: 2px solid var(--ink);
@@ -2328,7 +2338,7 @@ article.post-card {
 
 .crushes-header-bar {
   display: flex;
-  justify-content: space-between;
+  justify-content: center;
   align-items: center;
   flex-wrap: wrap;
   gap: 16px;
@@ -2588,6 +2598,97 @@ article.post-card {
   font-weight: 900;
   margin: 4px auto 0;
   padding: 7px 12px;
+}
+
+.received-matches-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 360px));
+  justify-content: center;
+  gap: 22px;
+}
+
+.received-match-card {
+  background: #fff;
+  border: 4px solid var(--ink);
+  box-shadow: 6px 6px 0 var(--ink);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  transition: transform 0.15s ease;
+}
+
+.received-match-card:hover {
+  transform: translate(-2px, -2px);
+}
+
+.received-match-photo-wrap {
+  width: 100%;
+  height: 240px;
+  position: relative;
+  overflow: hidden;
+  background: #f7f7f7;
+  border-bottom: 4px solid var(--ink);
+}
+
+.received-match-photo {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.received-match-fallback {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 56px;
+  background: linear-gradient(135deg, #ffd9ec, #fff9b0);
+}
+
+.received-match-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 18px 18px 20px;
+}
+
+.received-match-body .yellow-label {
+  align-self: flex-start;
+}
+
+.received-match-body h3 {
+  margin: 0;
+  font-size: 20px;
+  line-height: 1.2;
+  color: var(--ink);
+}
+
+.received-match-instagram {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--yellow);
+  border: 3px solid var(--ink);
+  box-shadow: 3px 3px 0 var(--ink);
+  color: var(--ink);
+  font-weight: 900;
+  font-size: 16px;
+  text-decoration: none;
+  padding: 10px 12px;
+  transition: transform 0.1s ease;
+}
+
+.received-match-instagram:hover {
+  transform: translate(-1px, -1px);
+}
+
+.received-match-note {
+  margin: 0;
+  color: #555;
+  font-size: 12px;
+  line-height: 1.5;
 }
 
 .crush-card-btn {
@@ -3450,10 +3551,18 @@ article.post-card {
 
   .crushes-container { min-width: 0; }
   .crush-account-strip {
+    display: grid;
+    grid-template-areas:
+      "avatar copy"
+      "tabs tabs"
+      "actions actions";
+    grid-template-columns: auto minmax(0, 1fr);
     gap: 10px;
     margin-bottom: 18px;
     padding: 9px 10px;
   }
+  .crush-account-avatar { grid-area: avatar; }
+  .crush-account-copy { grid-area: copy; }
   .crush-account-avatar {
     flex-basis: 38px;
     font-size: 17px;
@@ -3461,7 +3570,23 @@ article.post-card {
     width: 38px;
   }
   .crush-account-copy strong { font-size: 13px; }
-  .crush-account-actions { align-items: stretch; flex-direction: column; }
+  .crush-account-tabs.crushes-tabs {
+    display: flex;
+    grid-area: tabs;
+    justify-content: center;
+    width: 100%;
+  }
+  .crush-account-tabs .crush-tab-btn {
+    min-height: 42px;
+    padding: 8px 10px;
+    width: auto;
+  }
+  .crush-account-actions {
+    align-items: center;
+    flex-direction: row;
+    grid-area: actions;
+    justify-content: center;
+  }
   .crush-account-edit-btn,
   .crush-account-edit-link { font-size: 8px; padding: 5px 6px; }
   .crush-mock-card { max-width: 340px; }

@@ -27,6 +27,45 @@ function getCrushErrorMessage(error: unknown, fallback: string): string {
   return fallback;
 }
 
+function normalizeInstagramUsername(value?: string | null): string {
+  return (value ?? "").replace(/^@/, "").trim().toLowerCase();
+}
+
+function getMatchInstagramUsername(match: MatchResponse | null | undefined, currentUsername?: string | null): string | null {
+  if (!match) return null;
+
+  const candidates = [match.crush?.user?.username, match.likedCrush?.user?.username].filter(
+    (value): value is string => Boolean(value && value.trim())
+  );
+
+  const normalizedCurrentUsername = normalizeInstagramUsername(currentUsername);
+  const selectedCandidate = candidates.find(
+    (username) => normalizeInstagramUsername(username) !== normalizedCurrentUsername
+  );
+
+  const finalUsername = selectedCandidate ?? candidates[0];
+  return finalUsername ? finalUsername.replace(/^@/, "") : null;
+}
+
+function getMatchProfile(match: MatchResponse, myCrushId?: string | null): CrushResponse | null {
+  const selectedProfile =
+    (match.crush && match.crush.id !== myCrushId ? match.crush : null) ??
+    match.likedCrush ??
+    match.crush ??
+    null;
+
+  if (!selectedProfile) return null;
+
+  return {
+    id: selectedProfile.id,
+    photoUrl: selectedProfile.photoUrl ?? "",
+    description: selectedProfile.description ?? "",
+    gender: selectedProfile.gender ?? "OTHER",
+    orientation: selectedProfile.orientation ?? "BISEXUAL",
+    courseName: selectedProfile.course?.name ?? selectedProfile.user?.course?.name,
+  };
+}
+
 const genderLabels: Record<Gender, string> = {
   MALE: "Masculino",
   FEMALE: "Feminino",
@@ -45,6 +84,7 @@ const orientationLabels: Record<Orientation, string> = {
 
 export default function CrushesPage() {
   const [crushes, setCrushes] = useState<CrushResponse[]>([]);
+  const [sentMatches, setSentMatches] = useState<MatchResponse[]>([]);
   const [receivedMatches, setReceivedMatches] = useState<MatchResponse[]>([]);
   const [discardedCrushIds, setDiscardedCrushIds] = useState<Set<string>>(new Set());
   const [myCrushId, setMyCrushId] = useState<string | null>(null);
@@ -53,13 +93,12 @@ export default function CrushesPage() {
 
   const [token, setToken] = useState<string | null>(null);
   const [accountProfile, setAccountProfile] = useState<UserResponse | null>(null);
-  const [activeTab, setActiveTab] = useState<"gallery" | "received">("gallery");
+  const [activeTab, setActiveTab] = useState<"gallery" | "received" | "accepted">("gallery");
   const [accessState, setAccessState] = useState<"loading" | "unauthenticated" | "no-crush" | "ready">("loading");
 
   const [isLoadingCrushes, setIsLoadingCrushes] = useState(true);
   const [crushError, setCrushError] = useState("");
   const [matchingCrushId, setMatchingCrushId] = useState<string | null>(null);
-  const [revealedInstagram, setRevealedInstagram] = useState<string | null>(null);
   const [isDeletingCrush, setIsDeletingCrush] = useState(false);
 
   // Modal de cadastro de perfil
@@ -246,18 +285,24 @@ export default function CrushesPage() {
         }
 
         if (sentRes.status === "fulfilled" && sentRes.value?.content) {
+          setSentMatches(sentRes.value.content);
           const alreadyInteractedIds = sentRes.value.content.flatMap((match) =>
             [match.likedCrush?.id, match.crush?.id].filter((crushId): crushId is string => Boolean(crushId))
           );
-          setDiscardedCrushIds(new Set(alreadyInteractedIds));
+          setDiscardedCrushIds((prev) => new Set([...prev, ...alreadyInteractedIds]));
         }
 
         const acceptedMatches = [
           ...(sentRes.status === "fulfilled" ? sentRes.value.content : []),
           ...(receivedRes.status === "fulfilled" ? receivedRes.value.content : []),
         ].filter((match) => match.status === "ACCEPTED");
-        const instagramUsername = acceptedMatches[0]?.likedCrush?.user?.username || acceptedMatches[0]?.crush?.user?.username;
-        if (instagramUsername) setRevealedInstagram(instagramUsername.replace(/^@/, ""));
+
+        const currentUsername = accountProfile?.username ??
+          (typeof window !== "undefined" ? localStorage.getItem("gossipuerj_email")?.split("@")[0] ?? null : null);
+        const instagramUsername = getMatchInstagramUsername(acceptedMatches[0] ?? null, currentUsername);
+        if (instagramUsername) {
+          // Sem banner na galeria: a revelação acontece somente na aba de matches aceitos.
+        }
       } catch {
         // Ignora falhas de match se servidor estiver frio
       } finally {
@@ -269,7 +314,7 @@ export default function CrushesPage() {
     return () => {
       active = false;
     };
-  }, [token]);
+  }, [token, accountProfile?.username]);
 
   // Ação: Demonstrar Interesse / Match
   async function handleSendMatch(crush: CrushResponse) {
@@ -282,11 +327,15 @@ export default function CrushesPage() {
     try {
       const match = await api.createMatch(token, crush.id);
       setDiscardedCrushIds((prev) => new Set([...prev, crush.id]));
+      if (match.status === "ACCEPTED") {
+        setDiscardedCrushIds((prev) => new Set([...prev, crush.id]));
+      }
       setDeckIndex(0);
-      const matchedProfile = match.likedCrush || match.crush;
-      const instagramUsername = matchedProfile?.user?.username;
+
+      const currentUsername = accountProfile?.username ??
+        (typeof window !== "undefined" ? localStorage.getItem("gossipuerj_email")?.split("@")[0] ?? null : null);
+      const instagramUsername = getMatchInstagramUsername(match, currentUsername);
       if (match.status === "ACCEPTED" && instagramUsername) {
-        setRevealedInstagram(instagramUsername.replace(/^@/, ""));
         showToast("Deu match! O Instagram foi liberado.", "💖");
       } else {
         showToast("Interesse enviado! Se for recíproco, o Instagram será liberado.", "🎉");
@@ -390,11 +439,20 @@ export default function CrushesPage() {
     }
   }
 
+  const acceptedMatchCrushIds = new Set(
+    [...sentMatches, ...receivedMatches]
+      .filter((match) => match.status === "ACCEPTED")
+      .flatMap((match) => [match.crush?.id, match.likedCrush?.id])
+      .filter((crushId): crushId is string => Boolean(crushId))
+  );
+
   // Filtros aplicados
-  const deckCrushes = crushes.filter((crush) => crush.id !== myCrushId && !discardedCrushIds.has(crush.id));
+  const deckCrushes = crushes.filter(
+    (crush) => crush.id !== myCrushId && !discardedCrushIds.has(crush.id) && !acceptedMatchCrushIds.has(crush.id)
+  );
   const activeCrush = deckCrushes[deckIndex] ?? deckCrushes[0];
 
-  const pendingReceivedCount = receivedMatches.filter((m) => m.status === "PENDING").length;
+  const acceptedReceivedMatches = receivedMatches.filter((m) => m.status === "ACCEPTED");
 
   if (accessState !== "ready") {
     const isUnauthenticated = accessState === "unauthenticated";
@@ -449,7 +507,7 @@ export default function CrushesPage() {
 
               <div className="feature-showcase-grid">
                 <article className="feature-showcase-card">
-                  <div className="feature-icon">💘</div>
+                             <span>Matches</span>
                   <h2>Sem pressão</h2>
                   <p>Você curte e decide se quer revelar o Instagram só quando houver match real.</p>
                 </article>
@@ -562,6 +620,27 @@ export default function CrushesPage() {
               <strong>@{accountProfile?.username || accountProfile?.email?.split("@")[0] || "estudante"}</strong>
               <small>{accountProfile?.courseName || "Estudante da UERJ"}</small>
             </div>
+            <div className="crush-account-tabs crushes-tabs" role="tablist">
+              <button
+                type="button"
+                role="tab"
+                aria-selected={activeTab === "gallery"}
+                className={`crush-tab-btn ${activeTab === "gallery" ? "active" : ""}`}
+                onClick={() => setActiveTab("gallery")}
+              >
+                <span>💘 Galeria de Crushes</span>
+              </button>
+
+              <button
+                type="button"
+                role="tab"
+                aria-selected={activeTab === "received"}
+                className={`crush-tab-btn tab-received ${activeTab === "received" ? "active" : ""}`}
+                onClick={() => setActiveTab("received")}
+              >
+                <span>💖 Matches</span>
+              </button>
+            </div>
             <div className="crush-account-actions">
               <button type="button" className="crush-account-edit-btn" onClick={openEditCrushModal}>EDITAR CRUSH</button>
               <Link className="crush-account-edit-link" href="/perfil">EDITAR CONTA</Link>
@@ -576,46 +655,6 @@ export default function CrushesPage() {
             <span className="yellow-label centered-label" style={{ margin: "0 auto", fontSize: "11px", fontWeight: 900 }}>
               CONECTE-SE COM OUTROS ESTUDANTES DA UERJ E ENCONTRE SEU MATCH
             </span>
-          </div>
-
-          {/* Navegação entre galeria e matches recebidos */}
-          <div className="crushes-header-bar">
-            <div className="crushes-tabs" role="tablist">
-              <button
-                type="button"
-                role="tab"
-                aria-selected={activeTab === "gallery"}
-                className={`crush-tab-btn ${activeTab === "gallery" ? "active" : ""}`}
-                onClick={() => setActiveTab("gallery")}
-              >
-                <span>💘 Galeria de Crushes</span>
-                <span className="tab-counter">{crushes.length}</span>
-              </button>
-
-              <button
-                type="button"
-                role="tab"
-                aria-selected={activeTab === "received"}
-                className={`crush-tab-btn tab-received ${activeTab === "received" ? "active" : ""}`}
-                onClick={() => setActiveTab("received")}
-              >
-                <span>📬 Matches Recebidos</span>
-                {pendingReceivedCount > 0 && (
-                  <span className="tab-counter" style={{ background: "var(--yellow)", color: "var(--ink)" }}>
-                    {pendingReceivedCount} novos
-                  </span>
-                )}
-              </button>
-
-            </div>
-            <button
-              type="button"
-              className="delete-crush-btn"
-              onClick={() => void handleDeleteCrush()}
-              disabled={isDeletingCrush}
-            >
-              {isDeletingCrush ? "APAGANDO..." : "🗑️ APAGAR MEU PERFIL"}
-            </button>
           </div>
 
           {/* ABA 1: GALERIA DE CRUSHES */}
@@ -704,33 +743,73 @@ export default function CrushesPage() {
                   <p>Novos perfis podem aparecer a qualquer momento. Volte depois para continuar a descobrir.</p>
                 </div>
               )}
-              {revealedInstagram && (
-                <div className="crush-instagram-reveal">
-                  <span>💖 MATCH CONFIRMADO</span>
-                  <strong>O Instagram foi liberado:</strong>
-                  <a href={`https://instagram.com/${encodeURIComponent(revealedInstagram)}`} target="_blank" rel="noreferrer">
-                    @{revealedInstagram} ↗
-                  </a>
-                </div>
-              )}
             </div>
           )}
 
-          {/* ABA 2: MATCHES RECEBIDOS */}
+          {/* ABA 2: MATCHES */}
           {activeTab === "received" && (
             <div className="matches-list">
-              <div className="received-matches-teaser">
-                <div className="received-matches-blur" aria-hidden="true">
-                  {receivedMatches.length > 0 ? receivedMatches.slice(0, 3).map((match) => (
-                    <div key={match.id} className="received-match-silhouette">💘 &nbsp; alguém curtiu seu perfil</div>
-                  )) : <div className="received-match-silhouette">💘 &nbsp; alguém pode estar te esperando</div>}
+              {acceptedReceivedMatches.length > 0 ? (
+                <div className="received-matches-grid">
+                  {acceptedReceivedMatches.map((match) => {
+                    const matchedProfile = getMatchProfile(match, myCrushId);
+                    const instagramUsername = getMatchInstagramUsername(match, accountProfile?.username);
+
+                    return (
+                      <article key={match.id} className="received-match-card">
+                        <div className="received-match-photo-wrap">
+                          {matchedProfile?.photoUrl ? (
+                            /* eslint-disable-next-line @next/next/no-img-element */
+                            <img
+                              src={getPrivatePhotoUrl(matchedProfile.photoUrl)}
+                              alt="Perfil revelado do match"
+                              className="received-match-photo"
+                            />
+                          ) : (
+                            <div className="received-match-fallback">💘</div>
+                          )}
+                        </div>
+
+                        <div className="received-match-body">
+                          <h3>{matchedProfile?.description || "Alguém curtiu você"}</h3>
+                          <div className="crush-card-tags">
+                            {matchedProfile?.gender && (
+                              <span className="crush-tag gender">
+                                {genderLabels[matchedProfile.gender] || matchedProfile.gender}
+                              </span>
+                            )}
+                            {matchedProfile?.orientation && (
+                              <span className="crush-tag orientation">
+                                {orientationLabels[matchedProfile.orientation] || matchedProfile.orientation}
+                              </span>
+                            )}
+                          </div>
+                          {instagramUsername ? (
+                            <a href={`https://instagram.com/${encodeURIComponent(instagramUsername)}`} target="_blank" rel="noreferrer" className="received-match-instagram">
+                              @{instagramUsername} ↗
+                            </a>
+                          ) : (
+                            <p className="received-match-note">Instagram revelado após o match.</p>
+                          )}
+                        </div>
+                      </article>
+                    );
+                  })}
                 </div>
-                <div className="received-matches-overlay">
-                  <span>👀</span>
-                  <strong>Tem gente curiosa sobre você...</strong>
-                  <small>Continue curtindo para descobrir quem deu match.</small>
+              ) : (
+                <div className="received-matches-teaser">
+                  <div className="received-matches-blur" aria-hidden="true">
+                    {receivedMatches.length > 0 ? receivedMatches.slice(0, 3).map((match) => (
+                      <div key={match.id} className="received-match-silhouette">💘 &nbsp; alguém curtiu seu perfil</div>
+                    )) : <div className="received-match-silhouette">💘 &nbsp; alguém pode estar te esperando</div>}
+                  </div>
+                  <div className="received-matches-overlay">
+                    <span>💖</span>
+                    <strong>Ainda não há matches</strong>
+                    <small>Quando houver, eles aparecerão aqui em destaque.</small>
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
           )}
 
@@ -761,7 +840,20 @@ export default function CrushesPage() {
               ✕
             </button>
 
-            <h2 className="crush-modal-title">{isEditingCrush ? "Editar Perfil de Crush" : "Cadastrar Perfil de Crush"}</h2>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px", marginBottom: "12px" }}>
+              <h2 className="crush-modal-title" style={{ margin: 0 }}>{isEditingCrush ? "Editar Perfil de Crush" : "Cadastrar Perfil de Crush"}</h2>
+              {isEditingCrush && (
+                <button
+                  type="button"
+                  className="delete-crush-btn"
+                  onClick={() => void handleDeleteCrush()}
+                  disabled={isDeletingCrush || isSubmittingCrush || isUploadingPhoto}
+                  style={{ marginLeft: "auto" }}
+                >
+                  {isDeletingCrush ? "APAGANDO..." : "🗑️ APAGAR"}
+                </button>
+              )}
+            </div>
             <p className="crush-modal-subtitle">
               {isEditingCrush
                 ? "Atualize sua foto, descrição e preferências exibidas na vitrine de Crushes."
