@@ -245,6 +245,13 @@ export default function CrushesPage() {
           setReceivedMatches(receivedRes.value.content);
         }
 
+        if (sentRes.status === "fulfilled" && sentRes.value?.content) {
+          const alreadyInteractedIds = sentRes.value.content.flatMap((match) =>
+            [match.likedCrush?.id, match.crush?.id].filter((crushId): crushId is string => Boolean(crushId))
+          );
+          setDiscardedCrushIds(new Set(alreadyInteractedIds));
+        }
+
         const acceptedMatches = [
           ...(sentRes.status === "fulfilled" ? sentRes.value.content : []),
           ...(receivedRes.status === "fulfilled" ? receivedRes.value.content : []),
@@ -275,7 +282,7 @@ export default function CrushesPage() {
     try {
       const match = await api.createMatch(token, crush.id);
       setDiscardedCrushIds((prev) => new Set([...prev, crush.id]));
-      setDeckIndex((prev) => prev + 1);
+      setDeckIndex(0);
       const matchedProfile = match.likedCrush || match.crush;
       const instagramUsername = matchedProfile?.user?.username;
       if (match.status === "ACCEPTED" && instagramUsername) {
@@ -293,7 +300,7 @@ export default function CrushesPage() {
 
   function handleDiscardCrush(crushId: string) {
     setDiscardedCrushIds((prev) => new Set([...prev, crushId]));
-    setDeckIndex((prev) => prev + 1);
+    setDeckIndex(0);
   }
 
 
@@ -338,6 +345,10 @@ export default function CrushesPage() {
         : [savedCrush, ...prev]);
       setMyCrushId(savedCrush.id);
       setMyCrushPhotoUrl(savedCrush.photoUrl);
+      const crushesPage = await api.getAllCrushes(0, 60, undefined, token);
+      setCrushes(crushesPage?.content ?? []);
+      setDiscardedCrushIds(new Set());
+      setDeckIndex(0);
       setAccessState("ready");
       const wasEditingCrush = isEditingCrush;
       resetModalForm();
@@ -381,7 +392,7 @@ export default function CrushesPage() {
 
   // Filtros aplicados
   const deckCrushes = crushes.filter((crush) => crush.id !== myCrushId && !discardedCrushIds.has(crush.id));
-  const activeCrush = deckCrushes[deckIndex];
+  const activeCrush = deckCrushes[deckIndex] ?? deckCrushes[0];
 
   const pendingReceivedCount = receivedMatches.filter((m) => m.status === "PENDING").length;
 
