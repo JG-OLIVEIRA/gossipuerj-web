@@ -344,19 +344,103 @@ export default function FeedPage() {
         <SiteHeader active="feed" />
         <div className="campus-ticker-wrap">
           <div className="ticker-badge"><span>⚡</span><span>PLANTÃO UERJ</span></div>
-          <div className="ticker-scroll-box"><div className="ticker-track"><span>🔒 O feed do campus é exclusivo para quem tem uma conta</span><span>💬 Entre para ler, comentar e publicar fofocas</span></div></div>
-        </div>
-        <main className="pink-page feed-page feed-login-gate-page">
-          <div className="feed-login-gate">
-            <div className="feed-login-gate-icon">👀</div>
-            <span className="site-guide-kicker">A COMUNIDADE ESTÁ AQUI</span>
-            <h1>Tem coisa rolando na UERJ.</h1>
-            <p>Crie sua conta para ler as fofocas, comentar anonimamente, curtir as bombas do campus e soltar a sua.</p>
-            <div className="feed-login-gate-actions">
-              <Link className="pink-button" href="/login">ENTRAR OU CRIAR CONTA</Link>
-              <Link className="feed-login-guide-link" href="/como-usar">Como funciona o site?</Link>
+          <div className="ticker-scroll-box">
+            <div className="ticker-track">
+              <span>🔒 O feed do campus é exclusivo para quem tem uma conta</span>
+              <span>💬 Entre para ler, comentar e publicar fofocas</span>
+              <span>🎓 Descubra o que está rolando na UERJ em tempo real</span>
             </div>
-            <small>O cadastro começa com email institucional verificado. Depois, você pode atualizar seus dados no perfil.</small>
+          </div>
+        </div>
+
+        <main className="pink-page feed-page feed-login-gate-page">
+          <div className="feed-public-landing">
+            <div className="feed-public-hero">
+              <div className="feed-public-hero-copy">
+                <span className="site-guide-kicker">A COMUNIDADE ESTÁ AQUI</span>
+                <h1>Descubra o que está rolando na UERJ.</h1>
+                <p>
+                  O Gossip UERJ reúne fofocas anônimas, eventos, oportunidades, vendas e crushes do campus
+                  em um espaço feito para estudantes se conectarem sem drama.
+                </p>
+
+                <div className="feed-login-gate-actions">
+                  <Link className="pink-button" href="/login">ENTRAR OU CRIAR CONTA</Link>
+                  <Link className="feed-login-guide-link" href="/como-usar">Como funciona o site?</Link>
+                </div>
+
+                <ul className="public-proof-list" aria-label="Principais recursos do site">
+                  <li>💬 Feed anônimo com fofocas e alertas do campus</li>
+                  <li>💘 Galeria de crushes por curso e bloco</li>
+                  <li>🎉 Eventos, grupos e vendas da universidade</li>
+                </ul>
+              </div>
+
+              <div className="feed-public-preview" aria-label="Preview do site para visitantes">
+                <div className="preview-panel">
+                  <div className="preview-topbar">
+                    <span className="preview-dot pink" />
+                    <span className="preview-dot yellow" />
+                    <span className="preview-dot cyan" />
+                  </div>
+
+                  <div className="preview-card preview-post-card">
+                    <div className="preview-post-meta">
+                      <span className="preview-tag">📚 Acadêmico</span>
+                      <span className="preview-time">agora</span>
+                    </div>
+                    <h3>Alguém viu a turma de computação no bloco C?</h3>
+                    <p>Tem rumor de que o laboratório de redes ficou lotado e o professor saiu correndo...</p>
+                    <div className="preview-post-footer">
+                      <span>❤ 42</span>
+                      <span>💬 9</span>
+                    </div>
+                  </div>
+
+                  <div className="preview-mini-grid">
+                    <div className="preview-mini-card cyan">
+                      <span>💘</span>
+                      <strong>Crushes</strong>
+                      <small>12 perfis</small>
+                    </div>
+                    <div className="preview-mini-card yellow">
+                      <span>🎉</span>
+                      <strong>Eventos</strong>
+                      <small>4 hoje</small>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="feature-showcase-grid">
+              <article className="feature-showcase-card">
+                <div className="feature-icon">📢</div>
+                <h2>Feed do campus</h2>
+                <p>Leia e compartilhe fofocas, alertas e histórias em um ambiente anônimo e direto.</p>
+              </article>
+              <article className="feature-showcase-card">
+                <div className="feature-icon">💘</div>
+                <h2>Crushes da UERJ</h2>
+                <p>Descubra perfis de pessoas do mesmo curso ou campus e aproveite a galeria de crushes.</p>
+              </article>
+              <article className="feature-showcase-card">
+                <div className="feature-icon">🎉</div>
+                <h2>Eventos e grupos</h2>
+                <p>Veja o que tá acontecendo, encontre grupos da sua área e fique por dentro das oportunidades.</p>
+              </article>
+              <article className="feature-showcase-card">
+                <div className="feature-icon">🛍️</div>
+                <h2>Vendas e trocas</h2>
+                <p>Compra, venda e anúncio de itens úteis para a vida universitária sem sair do campus.</p>
+              </article>
+            </div>
+
+            <div className="feed-public-proof-bar">
+              <span>100% pensado para estudantes da UERJ</span>
+              <span>Fofocas sem exposição</span>
+              <span>Comunidade ativa</span>
+            </div>
           </div>
         </main>
         <SiteFooter />

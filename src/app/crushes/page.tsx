@@ -360,25 +360,102 @@ export default function CrushesPage() {
 
   if (accessState !== "ready") {
     const isUnauthenticated = accessState === "unauthenticated";
+
+    if (isUnauthenticated) {
+      return (
+        <div className="site-shell">
+          <SiteHeader active="crushes" authenticated={Boolean(token)} />
+          <main className="pink-page inner-page">
+            <div className="crush-public-landing">
+              <div className="crush-public-hero">
+                <div className="crush-public-hero-copy">
+                  <span className="site-guide-kicker">A GALERIA DOS CRUSHES</span>
+                  <h1>Descubra quem está dando match na UERJ.</h1>
+                  <p>
+                    A área de crushes reúne perfis de estudantes, interesses em comum e aquele toque de mistério que faz o campus ficar mais interessante.
+                  </p>
+
+                  <div className="feed-login-gate-actions">
+                    <Link className="pink-button" href="/login">ENTRAR E VER PERFIS</Link>
+                    <Link className="feed-login-guide-link" href="/como-usar">Como funciona?</Link>
+                  </div>
+
+                  <ul className="public-proof-list" aria-label="Destaques da galeria de crushes">
+                    <li>💘 Perfis de estudantes da UERJ com visual e curiosidade</li>
+                    <li>📸 Match com Instagram liberado só após interesse recíproco</li>
+                    <li>🎯 Curiosidade real, sem exposição vazia e sem drama</li>
+                  </ul>
+                </div>
+
+                <div className="crush-public-preview" aria-label="Pré-visualização da galeria de crushes">
+                  <div className="crush-mock-card">
+                    <div className="crush-mock-photo" />
+                    <div className="crush-mock-body">
+                      <div className="crush-mock-header">
+                        <span className="crush-mock-course">Ciência da Computação</span>
+                        <span className="crush-mock-badge">♥ Match</span>
+                      </div>
+                      <h3>“Sempre aparece no pavilhão cedo, e eu sempre fico sem coragem.”</h3>
+                      <div className="crush-mock-tags">
+                        <span>Feminino</span>
+                        <span>Bissexual</span>
+                      </div>
+                      <button type="button" className="crush-public-card-btn" disabled>
+                        ENTRAR PARA CURTIR
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="feature-showcase-grid">
+                <article className="feature-showcase-card">
+                  <div className="feature-icon">💘</div>
+                  <h2>Sem pressão</h2>
+                  <p>Você curte e decide se quer revelar o Instagram só quando houver match real.</p>
+                </article>
+                <article className="feature-showcase-card">
+                  <div className="feature-icon">🎓</div>
+                  <h2>Só da UERJ</h2>
+                  <p>Perfis filtrados pelo ambiente universitário e pela energia do campus.</p>
+                </article>
+                <article className="feature-showcase-card">
+                  <div className="feature-icon">🔒</div>
+                  <h2>Mais discreto</h2>
+                  <p>O contato só aparece quando o interesse é recíproco e confiável.</p>
+                </article>
+                <article className="feature-showcase-card">
+                  <div className="feature-icon">✨</div>
+                  <h2>Curiosidade em alta</h2>
+                  <p>É a forma mais simples de descobrir se a química existe sem muita exposição.</p>
+                </article>
+              </div>
+
+              <div className="feed-public-proof-bar">
+                <span>O campus inteiro</span>
+                <span>Perfis reais</span>
+                <span>Match certeiro</span>
+              </div>
+            </div>
+          </main>
+          <SiteFooter />
+        </div>
+      );
+    }
+
     return (
       <div className="site-shell">
         <SiteHeader active="crushes" authenticated={Boolean(token)} />
         <main className="pink-page inner-page">
           <div className="crush-access-card">
-            <div className="crush-access-icon">{isUnauthenticated ? "🔒" : "💘"}</div>
-            <h1>{accessState === "loading" ? "Abrindo a área de Crushes..." : isUnauthenticated ? "Entre para acessar os Crushes" : "Crie seu perfil de Crush primeiro"}</h1>
+            <div className="crush-access-icon">💘</div>
+            <h1>{accessState === "loading" ? "Abrindo a área de Crushes..." : "Crie seu perfil de Crush primeiro"}</h1>
             <p>
               {accessState === "loading"
                 ? "Só um instante..."
-                : isUnauthenticated
-                ? "A galeria é exclusiva para estudantes logados que também têm um perfil de Crush."
                 : "Para ver perfis e enviar curtidas, você precisa publicar seu próprio perfil de Crush."}
             </p>
-            {isUnauthenticated ? (
-              <Link className="create-crush-btn" href="/login">
-                ENTRAR AGORA
-              </Link>
-            ) : accessState === "no-crush" ? (
+            {accessState === "no-crush" ? (
               <form className="crush-inline-form" onSubmit={handleCreateCrush}>
                 {modalError && <p className="form-error" role="alert">{modalError}</p>}
                 <label className="crush-file-field">
