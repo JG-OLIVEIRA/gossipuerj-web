@@ -2233,6 +2233,7 @@ article.post-card {
   box-shadow: 6px 6px 0 var(--ink);
   display: flex;
   gap: 12px;
+  justify-content: center;
   margin: 0 auto 24px;
   max-width: 680px;
   padding: 10px 14px;
@@ -2366,20 +2367,44 @@ article.post-card {
 }
 
 .crush-tab-btn:hover {
+  background: var(--pink);
+  color: #fff;
+  filter: none;
   transform: translate(-1px, -1px);
 }
 
 .crush-tab-btn.active {
-  background: var(--yellow);
+  background: var(--ink);
+  color: #fff;
 }
 
 .crush-tab-btn.active.tab-received {
-  background: var(--pink);
+  background: var(--ink);
   color: #fff;
 }
 
 .crush-tab-btn.active.tab-sent {
-  background: var(--cyan);
+  background: var(--ink);
+  color: #fff;
+}
+
+.crush-account-tabs .crush-tab-btn,
+.crush-account-tabs .crush-tab-btn:not(.active) {
+  background: #fff;
+  color: var(--ink);
+}
+
+.crush-account-tabs .crush-tab-btn.active,
+.crush-account-tabs .crush-tab-btn.active.tab-received,
+.crush-account-tabs .crush-tab-btn.active.tab-sent {
+  background: var(--ink);
+  color: #fff;
+}
+
+.crush-account-tabs .crush-tab-btn:hover {
+  background: var(--pink);
+  color: #fff;
+  filter: none;
 }
 
 .tab-counter {
@@ -2876,6 +2901,15 @@ article.post-card {
   font-weight: 900;
   letter-spacing: -0.04em;
   margin: 0 0 6px;
+}
+
+.crush-modal-heading {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 12px;
+  padding-right: 42px;
 }
 
 .crush-modal-subtitle {
@@ -3551,44 +3585,30 @@ article.post-card {
 
   .crushes-container { min-width: 0; }
   .crush-account-strip {
-    display: grid;
-    grid-template-areas:
-      "avatar copy"
-      "tabs tabs"
-      "actions actions";
-    grid-template-columns: auto minmax(0, 1fr);
+    display: flex;
+    flex-wrap: wrap;
     gap: 10px;
     margin-bottom: 18px;
     padding: 9px 10px;
   }
-  .crush-account-avatar { grid-area: avatar; }
-  .crush-account-copy { grid-area: copy; }
-  .crush-account-avatar {
-    flex-basis: 38px;
-    font-size: 17px;
-    height: 38px;
-    width: 38px;
-  }
-  .crush-account-copy strong { font-size: 13px; }
   .crush-account-tabs.crushes-tabs {
     display: flex;
-    grid-area: tabs;
+    flex: 1 1 auto;
     justify-content: center;
-    width: 100%;
+    min-width: 0;
+    width: auto;
   }
   .crush-account-tabs .crush-tab-btn {
     min-height: 42px;
     padding: 8px 10px;
     width: auto;
   }
-  .crush-account-actions {
-    align-items: center;
-    flex-direction: row;
-    grid-area: actions;
-    justify-content: center;
-  }
   .crush-account-edit-btn,
   .crush-account-edit-link { font-size: 8px; padding: 5px 6px; }
+  .crush-account-actions {
+    flex: 0 1 auto;
+    justify-content: center;
+  }
   .crush-mock-card { max-width: 340px; }
   .crush-mock-photo { height: 190px; }
   .crush-mock-body { padding: 13px 12px 15px; }

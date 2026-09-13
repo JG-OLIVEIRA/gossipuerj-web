@@ -100,6 +100,8 @@ export default function CrushesPage() {
   const [crushError, setCrushError] = useState("");
   const [matchingCrushId, setMatchingCrushId] = useState<string | null>(null);
   const [isDeletingCrush, setIsDeletingCrush] = useState(false);
+  const crushAccountIdentity = `${accountProfile?.email ?? ""}|${accountProfile?.username ?? ""}`;
+  const crushMatchesStorageKey = `gossipuerj_ignored_crush_matches_${crushAccountIdentity}`;
 
   // Modal de cadastro de perfil
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -273,6 +275,10 @@ export default function CrushesPage() {
 
     async function loadMatches() {
       try {
+        const savedIgnoredMatchIds = typeof window !== "undefined"
+          ? JSON.parse(localStorage.getItem(crushMatchesStorageKey) ?? "[]") as string[]
+          : [];
+        const ignoredIds = new Set(savedIgnoredMatchIds);
         const [sentRes, receivedRes] = await Promise.allSettled([
           api.getSentMatches(token!),
           api.getReceivedMatches(token!),
@@ -281,12 +287,13 @@ export default function CrushesPage() {
         if (!active) return;
 
         if (receivedRes.status === "fulfilled" && receivedRes.value?.content) {
-          setReceivedMatches(receivedRes.value.content);
+          setReceivedMatches(receivedRes.value.content.filter((match) => !ignoredIds.has(match.id)));
         }
 
         if (sentRes.status === "fulfilled" && sentRes.value?.content) {
-          setSentMatches(sentRes.value.content);
-          const alreadyInteractedIds = sentRes.value.content.flatMap((match) =>
+          const visibleSentMatches = sentRes.value.content.filter((match) => !ignoredIds.has(match.id));
+          setSentMatches(visibleSentMatches);
+          const alreadyInteractedIds = visibleSentMatches.flatMap((match) =>
             [match.likedCrush?.id, match.crush?.id].filter((crushId): crushId is string => Boolean(crushId))
           );
           setDiscardedCrushIds((prev) => new Set([...prev, ...alreadyInteractedIds]));
@@ -297,7 +304,7 @@ export default function CrushesPage() {
           ...(receivedRes.status === "fulfilled" ? receivedRes.value.content : []),
         ].filter((match) => match.status === "ACCEPTED");
 
-        const currentUsername = accountProfile?.username ??
+        const currentUsername = crushAccountIdentity.split("|")[1] ||
           (typeof window !== "undefined" ? localStorage.getItem("gossipuerj_email")?.split("@")[0] ?? null : null);
         const instagramUsername = getMatchInstagramUsername(acceptedMatches[0] ?? null, currentUsername);
         if (instagramUsername) {
@@ -314,7 +321,7 @@ export default function CrushesPage() {
     return () => {
       active = false;
     };
-  }, [token, accountProfile?.username]);
+  }, [token, crushAccountIdentity, crushMatchesStorageKey]);
 
   // Ação: Demonstrar Interesse / Match
   async function handleSendMatch(crush: CrushResponse) {
@@ -417,6 +424,10 @@ export default function CrushesPage() {
     setIsDeletingCrush(true);
     try {
       await api.deleteCrush(token, myCrushId);
+      const ignoredIds = new Set([...sentMatches, ...receivedMatches].map((match) => match.id));
+      localStorage.setItem(crushMatchesStorageKey, JSON.stringify([...ignoredIds]));
+      setSentMatches([]);
+      setReceivedMatches([]);
       if (myCrushPhotoUrl) {
         const blobResponse = await fetch("/api/upload", {
           method: "DELETE",
@@ -612,14 +623,6 @@ export default function CrushesPage() {
       <main className="pink-page inner-page">
         <div className="crushes-container">
           <div className="crush-account-strip">
-            <div className="crush-account-avatar">
-              {(accountProfile?.username || accountProfile?.email || "U").charAt(0).toUpperCase()}
-            </div>
-            <div className="crush-account-copy">
-              <span className="crush-account-kicker">SEU PERFIL NA GALERIA</span>
-              <strong>@{accountProfile?.username || accountProfile?.email?.split("@")[0] || "estudante"}</strong>
-              <small>{accountProfile?.courseName || "Estudante da UERJ"}</small>
-            </div>
             <div className="crush-account-tabs crushes-tabs" role="tablist">
               <button
                 type="button"
@@ -642,8 +645,7 @@ export default function CrushesPage() {
               </button>
             </div>
             <div className="crush-account-actions">
-              <button type="button" className="crush-account-edit-btn" onClick={openEditCrushModal}>EDITAR CRUSH</button>
-              <Link className="crush-account-edit-link" href="/perfil">EDITAR CONTA</Link>
+              <button type="button" className="crush-account-edit-btn" onClick={openEditCrushModal}>EDITAR PERFIL DO CRUSH</button>
             </div>
           </div>
 
@@ -840,7 +842,7 @@ export default function CrushesPage() {
               ✕
             </button>
 
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px", marginBottom: "12px" }}>
+            <div className="crush-modal-heading">
               <h2 className="crush-modal-title" style={{ margin: 0 }}>{isEditingCrush ? "Editar Perfil de Crush" : "Cadastrar Perfil de Crush"}</h2>
               {isEditingCrush && (
                 <button
@@ -848,7 +850,6 @@ export default function CrushesPage() {
                   className="delete-crush-btn"
                   onClick={() => void handleDeleteCrush()}
                   disabled={isDeletingCrush || isSubmittingCrush || isUploadingPhoto}
-                  style={{ marginLeft: "auto" }}
                 >
                   {isDeletingCrush ? "APAGANDO..." : "🗑️ APAGAR"}
                 </button>
