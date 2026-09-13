@@ -182,6 +182,7 @@
   color: var(--ink);
   position: relative;
   overflow: hidden;
+  -webkit-user-select: none;
   user-select: none;
 }
 .avatar-uerj-badge {
@@ -699,6 +700,7 @@
   position: fixed;
   inset: 0;
   background: rgba(0, 0, 0, 0.6);
+  -webkit-backdrop-filter: blur(4px);
   backdrop-filter: blur(4px);
   display: flex;
   align-items: center;
@@ -2734,6 +2736,7 @@ article.post-card {
   position: fixed;
   inset: 0;
   background: rgba(0, 0, 0, 0.65);
+  -webkit-backdrop-filter: blur(4px);
   backdrop-filter: blur(4px);
   z-index: 100;
   display: flex;
@@ -3299,8 +3302,8 @@ article.post-card {
 @media (max-width:800px) {
   html, body { overflow-x: hidden; }
   .site-header { align-items:stretch; flex-direction:column; gap:14px; height:auto; padding:14px 4vw; position:sticky; top:0; z-index:10; }
-  .logo-box { font-size:19px; }
-  .site-nav { flex-wrap:nowrap; gap:4px; justify-content:flex-start; overflow-x:auto; overscroll-behavior-inline:contain; padding:2px 2px 7px; scrollbar-width:none; width:100%; }
+  .logo-box { align-self:center; font-size:19px; max-width:100%; width:max-content; }
+  .site-nav { flex-wrap:nowrap; gap:4px; justify-content:center; overflow-x:auto; overscroll-behavior-inline:contain; padding:2px 2px 7px; width:100%; }
   .site-nav::-webkit-scrollbar { display:none; }
   .site-nav a { flex:0 0 auto; font-size:10px; padding:9px 10px; }
   .pink-page { overflow-x:hidden; padding:32px 5vw; }
