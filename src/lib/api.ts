@@ -237,6 +237,52 @@ export type MatchResponse = {
   createdAt?: string;
 };
 
+function normalizeCrush(crush?: Partial<Crush> | null): Crush | undefined {
+  if (!crush) return undefined;
+
+  const courseName =
+    (crush as { courseName?: string }).courseName ??
+    (crush as { course?: { name?: string } }).course?.name ??
+    (crush as { user?: { course?: { name?: string } } }).user?.course?.name;
+
+  const normalizedUser = crush.user ?? {
+    username: (crush as { username?: string }).username ?? "",
+    course: courseName ? { id: "", name: courseName } : undefined,
+    email: "",
+  };
+
+  const normalizedCrush = {
+    id: String(crush.id ?? ""),
+    photoUrl: crush.photoUrl ?? "",
+    description: crush.description ?? "",
+    gender: (crush.gender as Gender) ?? "OTHER",
+    orientation: (crush.orientation as Orientation) ?? "BISEXUAL",
+    user: normalizedUser,
+    course: crush.course ?? (courseName ? { id: "", name: courseName } : undefined),
+  } satisfies Crush;
+
+  return {
+    ...normalizedCrush,
+    ...(courseName ? { courseName } : {}),
+  } as Crush;
+}
+
+function normalizeMatch(match?: Partial<MatchResponse> | null): MatchResponse | undefined {
+  if (!match) return undefined;
+
+  const normalizedCrush = normalizeCrush(match.crush as Partial<Crush> | undefined);
+  const normalizedLikedCrush = normalizeCrush(match.likedCrush as Partial<Crush> | undefined);
+
+  return {
+    id: String(match.id ?? ""),
+    crush: normalizedCrush,
+    likedCrush: normalizedLikedCrush,
+    status: (match.status as MatchStatus) ?? "PENDING",
+    unmatchedAt: match.unmatchedAt,
+    createdAt: match.createdAt,
+  };
+}
+
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const headers: Record<string, string> = {};
   if (options.body) {
@@ -509,7 +555,7 @@ export const api = {
     return request<MatchResponse | null>(`/api/v1/crushes/${encodeURIComponent(crushId)}/matches`, {
       method: "GET",
       headers: { Authorization: `Bearer ${token}` },
-    }).catch((error: unknown) => {
+    }).then((match) => (match ? normalizeMatch(match) ?? null : null)).catch((error: unknown) => {
       if (error instanceof ApiError && error.status === 404) {
         return null;
       }
@@ -523,7 +569,7 @@ export const api = {
     return request<MatchResponse>(`/api/v1/crushes/${encodeURIComponent(crushId)}/matches`, {
       method: "POST",
       headers: { Authorization: `Bearer ${token}` },
-    });
+    }).then((match) => normalizeMatch(match) ?? match);
   },
   likeCrush(token: string, crushId: string): Promise<MatchResponse> {
     return this.createMatch(token, crushId);
@@ -536,7 +582,7 @@ export const api = {
         method: "PUT",
         headers: { Authorization: `Bearer ${token}` },
       }
-    );
+    ).then((match) => normalizeMatch(match) ?? match);
   },
 
   rejectMatch(token: string, crushId: string, matchId: string): Promise<MatchResponse> {
@@ -546,7 +592,7 @@ export const api = {
         method: "PUT",
         headers: { Authorization: `Bearer ${token}` },
       }
-    );
+    ).then((match) => normalizeMatch(match) ?? match);
   },
 
   getSentMatches(token: string, page = 0, size = 50, sort?: string[]): Promise<PageResponseMatchResponse> {
@@ -557,7 +603,10 @@ export const api = {
         method: "GET",
         headers: { Authorization: `Bearer ${token}` },
       }
-    );
+    ).then((pageResponse) => ({
+      ...pageResponse,
+      content: (pageResponse.content ?? []).map((match) => normalizeMatch(match) ?? match),
+    }));
   },
 
   getReceivedMatches(token: string, page = 0, size = 50, sort?: string[]): Promise<PageResponseMatchResponse> {
@@ -568,7 +617,10 @@ export const api = {
         method: "GET",
         headers: { Authorization: `Bearer ${token}` },
       }
-    );
+    ).then((pageResponse) => ({
+      ...pageResponse,
+      content: (pageResponse.content ?? []).map((match) => normalizeMatch(match) ?? match),
+    }));
   },
 
   // ==========================================
