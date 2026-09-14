@@ -100,6 +100,7 @@ export default function CrushesPage() {
   const [crushes, setCrushes] = useState<CrushResponse[]>([]);
   const [sentMatches, setSentMatches] = useState<MatchResponse[]>([]);
   const [receivedMatches, setReceivedMatches] = useState<MatchResponse[]>([]);
+  const [myCrush, setMyCrush] = useState<CrushResponse | null>(null);
   const [myCrushId, setMyCrushId] = useState<string | null>(null);
   const [myCrushPhotoUrl, setMyCrushPhotoUrl] = useState<string | null>(null);
   const [deckIndex, setDeckIndex] = useState(0);
@@ -138,11 +139,10 @@ export default function CrushesPage() {
   }
 
   function openEditCrushModal() {
-    const currentCrush = crushes.find((crush) => crush.id === myCrushId);
-    if (!currentCrush) return;
+    if (!myCrush) return;
     setIsEditingCrush(true);
-    setPhotoUrl(currentCrush.photoUrl || "");
-    setPhotoPreview(currentCrush.photoUrl ? getPrivatePhotoUrl(currentCrush.photoUrl) : null);
+    setPhotoUrl(myCrush.photoUrl || "");
+    setPhotoPreview(myCrush.photoUrl ? getPrivatePhotoUrl(myCrush.photoUrl) : null);
     setUploadSuccessMessage("");
     setModalError("");
     setIsModalOpen(true);
@@ -232,6 +232,7 @@ export default function CrushesPage() {
           if (active && savedEmail) setAccountProfile({ email: savedEmail, username: savedEmail.split("@")[0] });
         }
         const myCrush = await api.getMyCrush(savedToken);
+        setMyCrush(myCrush);
         setMyCrushId(myCrush.id);
         setMyCrushPhotoUrl(myCrush.photoUrl);
         const [crushesPage, rejectedMatchesPage] = await Promise.all([
@@ -431,6 +432,7 @@ export default function CrushesPage() {
         ? prev.map((crush) => (crush.id === savedCrush.id ? savedCrush : crush))
         : [savedCrush, ...prev]);
       setMyCrushId(savedCrush.id);
+      setMyCrush(savedCrush);
       setMyCrushPhotoUrl(savedCrush.photoUrl);
       const crushesPage = await api.getAllCrushes(0, 60, undefined, token);
       setCrushes(crushesPage?.content ?? []);
@@ -983,7 +985,7 @@ export default function CrushesPage() {
                 Descrição / Fofoca sobre você *
                 <textarea
                   name="description"
-                  defaultValue={isEditingCrush ? crushes.find((crush) => crush.id === myCrushId)?.description : ""}
+                  defaultValue={isEditingCrush ? myCrush?.description : ""}
                   placeholder="Ex: Alguém do 6º andar me notou na aula de Introdução? Sempre no pilotis ou na choppada..."
                   required
                 />
@@ -992,7 +994,7 @@ export default function CrushesPage() {
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
                 <label>
                   Gênero
-                    <select name="gender" defaultValue={isEditingCrush ? crushes.find((crush) => crush.id === myCrushId)?.gender : "OTHER"}>
+                    <select name="gender" defaultValue={isEditingCrush ? myCrush?.gender : "OTHER"}>
                     <option value="FEMALE">Feminino</option>
                     <option value="MALE">Masculino</option>
                     <option value="TRANSGENDER">Transgênero</option>
@@ -1003,7 +1005,7 @@ export default function CrushesPage() {
 
                 <label>
                   Orientação
-                    <select name="orientation" defaultValue={isEditingCrush ? crushes.find((crush) => crush.id === myCrushId)?.orientation : "BISEXUAL"}>
+                    <select name="orientation" defaultValue={isEditingCrush ? myCrush?.orientation : "BISEXUAL"}>
                     <option value="HETEROSEXUAL">Heterossexual</option>
                     <option value="HOMOSEXUAL">Homossexual</option>
                     <option value="BISEXUAL">Bissexual</option>
