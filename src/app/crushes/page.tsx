@@ -66,6 +66,14 @@ function getMatchProfile(match: MatchResponse, myCrushId?: string | null): Crush
   };
 }
 
+function getMatchedCrushIds(matches: MatchResponse[]): Set<string> {
+  return new Set(
+    matches.flatMap((match) =>
+      [match.crush?.id, match.likedCrush?.id].filter((crushId): crushId is string => Boolean(crushId))
+    )
+  );
+}
+
 const genderLabels: Record<Gender, string> = {
   MALE: "Masculino",
   FEMALE: "Feminino",
@@ -86,7 +94,6 @@ export default function CrushesPage() {
   const [crushes, setCrushes] = useState<CrushResponse[]>([]);
   const [sentMatches, setSentMatches] = useState<MatchResponse[]>([]);
   const [receivedMatches, setReceivedMatches] = useState<MatchResponse[]>([]);
-  const [discardedCrushIds, setDiscardedCrushIds] = useState<Set<string>>(new Set());
   const [myCrushId, setMyCrushId] = useState<string | null>(null);
   const [myCrushPhotoUrl, setMyCrushPhotoUrl] = useState<string | null>(null);
   const [deckIndex, setDeckIndex] = useState(0);
@@ -101,8 +108,6 @@ export default function CrushesPage() {
   const [matchingCrushId, setMatchingCrushId] = useState<string | null>(null);
   const [isDeletingCrush, setIsDeletingCrush] = useState(false);
   const crushAccountIdentity = `${accountProfile?.email ?? ""}|${accountProfile?.username ?? ""}`;
-  const crushMatchesStorageKey = `gossipuerj_ignored_crush_matches_${crushAccountIdentity}`;
-  const crushDiscardStorageKey = `gossipuerj_discarded_crushes_${crushAccountIdentity}`;
 
   // Modal de cadastro de perfil
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -223,31 +228,21 @@ export default function CrushesPage() {
         const myCrush = await api.getMyCrush(savedToken);
         setMyCrushId(myCrush.id);
         setMyCrushPhotoUrl(myCrush.photoUrl);
-        const crushesPage = await api.getAllCrushes(0, 60, undefined, savedToken);
+        const [crushesPage, sentMatchesPage, receivedMatchesPage] = await Promise.all([
+          api.getAllCrushes(0, 60, undefined, savedToken),
+          api.getSentMatches(savedToken, 0, 100),
+          api.getReceivedMatches(savedToken, 0, 100),
+        ]);
 
         if (!active) return;
 
-        const visibleCrushes: CrushResponse[] = [];
-        for (const crush of crushesPage?.content ?? []) {
-          if (crush.id === myCrush.id) continue;
-
-          try {
-            const existingMatch = await api.getCrushMatch(savedToken, crush.id);
-            if (existingMatch && existingMatch.status !== "PENDING") {
-              continue;
-            }
-            if (existingMatch && existingMatch.status === "PENDING") {
-              continue;
-            }
-            visibleCrushes.push(crush);
-          } catch (err: unknown) {
-            if (err instanceof ApiError && err.status === 404) {
-              visibleCrushes.push(crush);
-            } else {
-              visibleCrushes.push(crush);
-            }
-          }
-        }
+        const matchedCrushIds = getMatchedCrushIds([
+          ...(sentMatchesPage?.content ?? []),
+          ...(receivedMatchesPage?.content ?? []),
+        ]);
+        const visibleCrushes = (crushesPage?.content ?? []).filter(
+          (crush) => crush.id !== myCrush.id && !matchedCrushIds.has(crush.id)
+        );
 
         setCrushes(visibleCrushes);
         setAccessState("ready");
@@ -283,29 +278,18 @@ export default function CrushesPage() {
         return;
       }
 
-      const data = await api.getAllCrushes(0, 60, undefined, token);
-      const visibleCrushes: CrushResponse[] = [];
-
-      for (const crush of data?.content || []) {
-        if (crush.id === myCrushId) continue;
-
-        try {
-          const existingMatch = await api.getCrushMatch(token, crush.id);
-          if (existingMatch && existingMatch.status !== "PENDING") {
-            continue;
-          }
-          if (existingMatch && existingMatch.status === "PENDING") {
-            continue;
-          }
-          visibleCrushes.push(crush);
-        } catch (err: unknown) {
-          if (err instanceof ApiError && err.status === 404) {
-            visibleCrushes.push(crush);
-          } else {
-            visibleCrushes.push(crush);
-          }
-        }
-      }
+      const [data, sentMatchesPage, receivedMatchesPage] = await Promise.all([
+        api.getAllCrushes(0, 60, undefined, token),
+        api.getSentMatches(token, 0, 100),
+        api.getReceivedMatches(token, 0, 100),
+      ]);
+      const matchedCrushIds = getMatchedCrushIds([
+        ...(sentMatchesPage?.content ?? []),
+        ...(receivedMatchesPage?.content ?? []),
+      ]);
+      const visibleCrushes = (data?.content ?? []).filter(
+        (crush) => crush.id !== myCrushId && !matchedCrushIds.has(crush.id)
+      );
 
       setCrushes(visibleCrushes);
     } catch (err: unknown) {
@@ -320,18 +304,6 @@ export default function CrushesPage() {
     }
   }
 
-  useEffect(() => {
-    if (!token) return;
-
-    const storedDiscardedCrushIds = typeof window !== "undefined"
-      ? (JSON.parse(localStorage.getItem(crushDiscardStorageKey) ?? "[]") as string[])
-      : [];
-
-    if (storedDiscardedCrushIds.length > 0) {
-      setDiscardedCrushIds((prev) => new Set([...prev, ...storedDiscardedCrushIds]));
-    }
-  }, [token, crushDiscardStorageKey]);
-
   // Carregar Matches do usuário se autenticado
   useEffect(() => {
     if (!token) return;
@@ -339,10 +311,6 @@ export default function CrushesPage() {
 
     async function loadMatches() {
       try {
-        const savedIgnoredMatchIds = typeof window !== "undefined"
-          ? JSON.parse(localStorage.getItem(crushMatchesStorageKey) ?? "[]") as string[]
-          : [];
-        const ignoredIds = new Set(savedIgnoredMatchIds);
         const [sentRes, receivedRes] = await Promise.allSettled([
           api.getSentMatches(token!),
           api.getReceivedMatches(token!),
@@ -353,22 +321,11 @@ export default function CrushesPage() {
         const receivedMatchesContent = receivedRes.status === "fulfilled" ? (receivedRes.value?.content ?? []) : [];
         const sentMatchesContent = sentRes.status === "fulfilled" ? (sentRes.value?.content ?? []) : [];
 
-        const visibleReceivedMatches = receivedMatchesContent.filter((match) => !ignoredIds.has(match.id));
-        const visibleSentMatches = sentMatchesContent.filter((match) => !ignoredIds.has(match.id));
-
-        setReceivedMatches(visibleReceivedMatches);
+        setReceivedMatches(receivedMatchesContent);
 
         if (sentRes.status === "fulfilled" && sentRes.value?.content) {
-          setSentMatches(visibleSentMatches);
+          setSentMatches(sentMatchesContent);
         }
-
-        const serverInteractedIds = [...visibleSentMatches, ...visibleReceivedMatches]
-          .filter((match) => match.status !== "PENDING")
-          .flatMap((match) =>
-            [match.likedCrush?.id, match.crush?.id].filter((crushId): crushId is string => Boolean(crushId))
-          );
-
-        setDiscardedCrushIds((prev) => new Set([...prev, ...serverInteractedIds]));
 
         const acceptedMatches = [
           ...(sentRes.status === "fulfilled" ? sentRes.value.content : []),
@@ -392,7 +349,7 @@ export default function CrushesPage() {
     return () => {
       active = false;
     };
-  }, [token, crushAccountIdentity, crushMatchesStorageKey]);
+  }, [token, crushAccountIdentity]);
 
   // Ação: Demonstrar Interesse / Match
   async function handleSendMatch(crush: CrushResponse) {
@@ -404,10 +361,6 @@ export default function CrushesPage() {
     setMatchingCrushId(crush.id);
     try {
       const match = await api.createMatch(token, crush.id);
-      setDiscardedCrushIds((prev) => new Set([...prev, crush.id]));
-      if (match.status === "ACCEPTED") {
-        setDiscardedCrushIds((prev) => new Set([...prev, crush.id]));
-      }
       setDeckIndex(0);
 
       const currentUsername = accountProfile?.username ??
@@ -426,25 +379,14 @@ export default function CrushesPage() {
   }
 
   async function handleDiscardCrush(crushId: string) {
-    const existingMatch = [...sentMatches, ...receivedMatches].find((match) =>
-      [match.crush?.id, match.likedCrush?.id].includes(crushId)
-    );
+    if (!token) return;
 
-    if (token && existingMatch?.id) {
-      try {
-        await api.rejectMatch(token, crushId, existingMatch.id);
-      } catch {
-        // Se o backend não aceitar a rejeição, seguimos com o filtro local para manter a UX consistente.
-      }
+    try {
+      await api.createMatch(token, crushId, "REJECTED");
+      setCrushes((prev) => prev.filter((crush) => crush.id !== crushId));
+    } catch (err) {
+      showToast(getCrushErrorMessage(err, "Não foi possível descartar este perfil."), "⚠️");
     }
-
-    setDiscardedCrushIds((prev) => {
-      const next = new Set([...prev, crushId]);
-      if (typeof window !== "undefined") {
-        localStorage.setItem(crushDiscardStorageKey, JSON.stringify([...next]));
-      }
-      return next;
-    });
     setDeckIndex(0);
   }
 
@@ -492,7 +434,6 @@ export default function CrushesPage() {
       setMyCrushPhotoUrl(savedCrush.photoUrl);
       const crushesPage = await api.getAllCrushes(0, 60, undefined, token);
       setCrushes(crushesPage?.content ?? []);
-      setDiscardedCrushIds(new Set());
       setDeckIndex(0);
       setAccessState("ready");
       const wasEditingCrush = isEditingCrush;
@@ -513,8 +454,6 @@ export default function CrushesPage() {
     setIsDeletingCrush(true);
     try {
       await api.deleteCrush(token, myCrushId);
-      const ignoredIds = new Set([...sentMatches, ...receivedMatches].map((match) => match.id));
-      localStorage.setItem(crushMatchesStorageKey, JSON.stringify([...ignoredIds]));
       setSentMatches([]);
       setReceivedMatches([]);
       if (myCrushPhotoUrl) {
@@ -548,7 +487,7 @@ export default function CrushesPage() {
 
   // Filtros aplicados
   const deckCrushes = crushes.filter(
-    (crush) => crush.id !== myCrushId && !discardedCrushIds.has(crush.id) && !acceptedMatchCrushIds.has(crush.id)
+    (crush) => crush.id !== myCrushId && !acceptedMatchCrushIds.has(crush.id)
   );
   const activeCrush = deckCrushes[deckIndex] ?? deckCrushes[0];
 

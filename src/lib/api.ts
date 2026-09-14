@@ -228,6 +228,10 @@ export type CrushResponse = {
 // Match schemas
 export type MatchStatus = "PENDING" | "ACCEPTED" | "REJECTED";
 
+export type MatchRequest = {
+  status: MatchStatus;
+};
+
 export type MatchResponse = {
   id: string;
   crush?: Crush;
@@ -551,8 +555,9 @@ export const api = {
   // ==========================================
   // Match Controller (/api/v1/crushes/.../matches & /api/v1/matches/...)
   // ==========================================
-  getCrushMatch(token: string, crushId: string): Promise<MatchResponse | null> {
-    return request<MatchResponse | null>(`/api/v1/crushes/${encodeURIComponent(crushId)}/matches`, {
+  getCrushMatch(token: string, crushId: string, status?: MatchStatus): Promise<MatchResponse | null> {
+    const query = status ? `?status=${encodeURIComponent(status)}` : "";
+    return request<MatchResponse | null>(`/api/v1/crushes/${encodeURIComponent(crushId)}/matches${query}`, {
       method: "GET",
       headers: { Authorization: `Bearer ${token}` },
     }).then((match) => (match ? normalizeMatch(match) ?? null : null)).catch((error: unknown) => {
@@ -562,13 +567,14 @@ export const api = {
       throw error;
     });
   },
-  getMatchForCrush(token: string, crushId: string): Promise<MatchResponse | null> {
-    return this.getCrushMatch(token, crushId);
+  getMatchForCrush(token: string, crushId: string, status?: MatchStatus): Promise<MatchResponse | null> {
+    return this.getCrushMatch(token, crushId, status);
   },
-  createMatch(token: string, crushId: string): Promise<MatchResponse> {
+  createMatch(token: string, crushId: string, status: MatchStatus = "PENDING"): Promise<MatchResponse> {
     return request<MatchResponse>(`/api/v1/crushes/${encodeURIComponent(crushId)}/matches`, {
       method: "POST",
       headers: { Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ status } satisfies MatchRequest),
     }).then((match) => normalizeMatch(match) ?? match);
   },
   likeCrush(token: string, crushId: string): Promise<MatchResponse> {
