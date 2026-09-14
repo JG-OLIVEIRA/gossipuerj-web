@@ -505,6 +505,20 @@ export const api = {
   // ==========================================
   // Match Controller (/api/v1/crushes/.../matches & /api/v1/matches/...)
   // ==========================================
+  getCrushMatch(token: string, crushId: string): Promise<MatchResponse | null> {
+    return request<MatchResponse | null>(`/api/v1/crushes/${encodeURIComponent(crushId)}/matches`, {
+      method: "GET",
+      headers: { Authorization: `Bearer ${token}` },
+    }).catch((error: unknown) => {
+      if (error instanceof ApiError && error.status === 404) {
+        return null;
+      }
+      throw error;
+    });
+  },
+  getMatchForCrush(token: string, crushId: string): Promise<MatchResponse | null> {
+    return this.getCrushMatch(token, crushId);
+  },
   createMatch(token: string, crushId: string): Promise<MatchResponse> {
     return request<MatchResponse>(`/api/v1/crushes/${encodeURIComponent(crushId)}/matches`, {
       method: "POST",

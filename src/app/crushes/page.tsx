@@ -226,7 +226,30 @@ export default function CrushesPage() {
         const crushesPage = await api.getAllCrushes(0, 60, undefined, savedToken);
 
         if (!active) return;
-        setCrushes(crushesPage?.content ?? []);
+
+        const visibleCrushes: CrushResponse[] = [];
+        for (const crush of crushesPage?.content ?? []) {
+          if (crush.id === myCrush.id) continue;
+
+          try {
+            const existingMatch = await api.getCrushMatch(savedToken, crush.id);
+            if (existingMatch && existingMatch.status !== "PENDING") {
+              continue;
+            }
+            if (existingMatch && existingMatch.status === "PENDING") {
+              continue;
+            }
+            visibleCrushes.push(crush);
+          } catch (err: unknown) {
+            if (err instanceof ApiError && err.status === 404) {
+              visibleCrushes.push(crush);
+            } else {
+              visibleCrushes.push(crush);
+            }
+          }
+        }
+
+        setCrushes(visibleCrushes);
         setAccessState("ready");
       } catch (err: unknown) {
         if (active) {
@@ -255,8 +278,36 @@ export default function CrushesPage() {
     setIsLoadingCrushes(true);
     setCrushError("");
     try {
-      const data = await api.getAllCrushes(0, 60, undefined, token || undefined);
-      setCrushes(data?.content || []);
+      if (!token) {
+        setCrushes([]);
+        return;
+      }
+
+      const data = await api.getAllCrushes(0, 60, undefined, token);
+      const visibleCrushes: CrushResponse[] = [];
+
+      for (const crush of data?.content || []) {
+        if (crush.id === myCrushId) continue;
+
+        try {
+          const existingMatch = await api.getCrushMatch(token, crush.id);
+          if (existingMatch && existingMatch.status !== "PENDING") {
+            continue;
+          }
+          if (existingMatch && existingMatch.status === "PENDING") {
+            continue;
+          }
+          visibleCrushes.push(crush);
+        } catch (err: unknown) {
+          if (err instanceof ApiError && err.status === 404) {
+            visibleCrushes.push(crush);
+          } else {
+            visibleCrushes.push(crush);
+          }
+        }
+      }
+
+      setCrushes(visibleCrushes);
     } catch (err: unknown) {
       if (err instanceof ApiError && err.status === 403 && !token) {
         setCrushError("AUTH_REQUIRED");
