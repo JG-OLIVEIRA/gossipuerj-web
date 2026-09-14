@@ -494,7 +494,16 @@ export default function CrushesPage() {
   );
   const activeCrush = deckCrushes[deckIndex] ?? deckCrushes[0];
 
-  const acceptedReceivedMatches = receivedMatches.filter((m) => m.status === "ACCEPTED");
+  const acceptedMatchesForMe = [...sentMatches, ...receivedMatches].filter((match) => {
+    if (match.status !== "ACCEPTED") return false;
+    const participantIds = [match.crush?.id, match.likedCrush?.id].filter((id): id is string => Boolean(id));
+    return participantIds.includes(myCrushId ?? "") || !myCrushId;
+  });
+
+  const acceptedReceivedMatches = acceptedMatchesForMe.filter((match) => {
+    const profileIds = [match.crush?.id, match.likedCrush?.id].filter((id): id is string => Boolean(id));
+    return profileIds.some((id) => id !== myCrushId);
+  });
 
   if (accessState !== "ready") {
     const isUnauthenticated = accessState === "unauthenticated";
