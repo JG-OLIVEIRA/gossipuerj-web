@@ -66,31 +66,18 @@ function getMatchProfile(match: MatchResponse, myCrushId?: string | null): Crush
   };
 }
 
-async function getUnmatchedCrushes(
-  token: string,
-  crushes: CrushResponse[],
-  myCrushId: string
-): Promise<CrushResponse[]> {
-  const visibleCrushes: CrushResponse[] = [];
+function getMatchCrushIds(matches: MatchResponse[]): Set<string> {
+  return new Set(
+    matches.flatMap((match) =>
+      [match.crush?.id, match.likedCrush?.id].filter((crushId): crushId is string => Boolean(crushId))
+    )
+  );
+}
 
-  for (const crush of crushes) {
-    if (crush.id === myCrushId) continue;
-
-    try {
-      const rejectedMatch = await api.getCrushMatch(token, crush.id, "REJECTED");
-      if (!rejectedMatch) {
-        visibleCrushes.push(crush);
-      }
-    } catch (error) {
-      if (error instanceof ApiError && error.status === 404) {
-        visibleCrushes.push(crush);
-      } else {
-        throw error;
-      }
-    }
-  }
-
-  return visibleCrushes;
+function getVisibleCrushes(crushes: CrushResponse[], myCrushId: string, rejectedCrushIds: Set<string>): CrushResponse[] {
+  return crushes.filter(
+    (crush) => crush.id !== myCrushId && !rejectedCrushIds.has(crush.id)
+  );
 }
 
 const genderLabels: Record<Gender, string> = {
@@ -247,14 +234,17 @@ export default function CrushesPage() {
         const myCrush = await api.getMyCrush(savedToken);
         setMyCrushId(myCrush.id);
         setMyCrushPhotoUrl(myCrush.photoUrl);
-        const crushesPage = await api.getAllCrushes(0, 60, undefined, savedToken);
+        const [crushesPage, rejectedMatchesPage] = await Promise.all([
+          api.getAllCrushes(0, 60, undefined, savedToken),
+          api.getRejectedMatches(savedToken),
+        ]);
 
         if (!active) return;
 
-        const visibleCrushes = await getUnmatchedCrushes(
-          savedToken,
+        const visibleCrushes = getVisibleCrushes(
           crushesPage?.content ?? [],
-          myCrush.id
+          myCrush.id,
+          getMatchCrushIds(rejectedMatchesPage?.content ?? [])
         );
 
         setCrushes(visibleCrushes);
@@ -291,11 +281,14 @@ export default function CrushesPage() {
         return;
       }
 
-      const data = await api.getAllCrushes(0, 60, undefined, token);
-      const visibleCrushes = await getUnmatchedCrushes(
-        token,
+      const [data, rejectedMatchesPage] = await Promise.all([
+        api.getAllCrushes(0, 60, undefined, token),
+        api.getRejectedMatches(token),
+      ]);
+      const visibleCrushes = getVisibleCrushes(
         data?.content ?? [],
-        myCrushId ?? ""
+        myCrushId ?? "",
+        getMatchCrushIds(rejectedMatchesPage?.content ?? [])
       );
 
       setCrushes(visibleCrushes);

@@ -629,6 +629,20 @@ export const api = {
     }));
   },
 
+  getRejectedMatches(token: string, page = 0, size = 100, sort?: string[]): Promise<PageResponseMatchResponse> {
+    const sortQuery = sort && sort.length ? `&${sort.map((s) => `sort=${encodeURIComponent(s)}`).join("&")}` : "";
+    return request<PageResponseMatchResponse>(
+      `/api/v1/matches/rejected?page=${page}&size=${size}${sortQuery}`,
+      {
+        method: "GET",
+        headers: { Authorization: `Bearer ${token}` },
+      }
+    ).then((pageResponse) => ({
+      ...pageResponse,
+      content: (pageResponse.content ?? []).map((match) => normalizeMatch(match) ?? match),
+    }));
+  },
+
   // ==========================================
   // Course Controller (/api/v1/courses)
   // ==========================================
