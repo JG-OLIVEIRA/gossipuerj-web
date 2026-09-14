@@ -299,18 +299,25 @@ export default function CrushesPage() {
 
         if (!active) return;
 
-        if (receivedRes.status === "fulfilled" && receivedRes.value?.content) {
-          setReceivedMatches(receivedRes.value.content.filter((match) => !ignoredIds.has(match.id)));
-        }
+        const receivedMatchesContent = receivedRes.status === "fulfilled" ? (receivedRes.value?.content ?? []) : [];
+        const sentMatchesContent = sentRes.status === "fulfilled" ? (sentRes.value?.content ?? []) : [];
+
+        const visibleReceivedMatches = receivedMatchesContent.filter((match) => !ignoredIds.has(match.id));
+        const visibleSentMatches = sentMatchesContent.filter((match) => !ignoredIds.has(match.id));
+
+        setReceivedMatches(visibleReceivedMatches);
 
         if (sentRes.status === "fulfilled" && sentRes.value?.content) {
-          const visibleSentMatches = sentRes.value.content.filter((match) => !ignoredIds.has(match.id));
           setSentMatches(visibleSentMatches);
-          const alreadyInteractedIds = visibleSentMatches.flatMap((match) =>
+        }
+
+        const serverInteractedIds = [...visibleSentMatches, ...visibleReceivedMatches]
+          .filter((match) => match.status !== "PENDING")
+          .flatMap((match) =>
             [match.likedCrush?.id, match.crush?.id].filter((crushId): crushId is string => Boolean(crushId))
           );
-          setDiscardedCrushIds((prev) => new Set([...prev, ...alreadyInteractedIds]));
-        }
+
+        setDiscardedCrushIds((prev) => new Set([...prev, ...serverInteractedIds]));
 
         const acceptedMatches = [
           ...(sentRes.status === "fulfilled" ? sentRes.value.content : []),
