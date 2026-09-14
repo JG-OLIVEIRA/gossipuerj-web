@@ -102,6 +102,7 @@ export default function CrushesPage() {
   const [isDeletingCrush, setIsDeletingCrush] = useState(false);
   const crushAccountIdentity = `${accountProfile?.email ?? ""}|${accountProfile?.username ?? ""}`;
   const crushMatchesStorageKey = `gossipuerj_ignored_crush_matches_${crushAccountIdentity}`;
+  const crushDiscardStorageKey = `gossipuerj_discarded_crushes_${crushAccountIdentity}`;
 
   // Modal de cadastro de perfil
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -268,6 +269,18 @@ export default function CrushesPage() {
     }
   }
 
+  useEffect(() => {
+    if (!token) return;
+
+    const storedDiscardedCrushIds = typeof window !== "undefined"
+      ? (JSON.parse(localStorage.getItem(crushDiscardStorageKey) ?? "[]") as string[])
+      : [];
+
+    if (storedDiscardedCrushIds.length > 0) {
+      setDiscardedCrushIds((prev) => new Set([...prev, ...storedDiscardedCrushIds]));
+    }
+  }, [token, crushDiscardStorageKey]);
+
   // Carregar Matches do usuário se autenticado
   useEffect(() => {
     if (!token) return;
@@ -354,8 +367,26 @@ export default function CrushesPage() {
     }
   }
 
-  function handleDiscardCrush(crushId: string) {
-    setDiscardedCrushIds((prev) => new Set([...prev, crushId]));
+  async function handleDiscardCrush(crushId: string) {
+    const existingMatch = [...sentMatches, ...receivedMatches].find((match) =>
+      [match.crush?.id, match.likedCrush?.id].includes(crushId)
+    );
+
+    if (token && existingMatch?.id) {
+      try {
+        await api.rejectMatch(token, crushId, existingMatch.id);
+      } catch {
+        // Se o backend não aceitar a rejeição, seguimos com o filtro local para manter a UX consistente.
+      }
+    }
+
+    setDiscardedCrushIds((prev) => {
+      const next = new Set([...prev, crushId]);
+      if (typeof window !== "undefined") {
+        localStorage.setItem(crushDiscardStorageKey, JSON.stringify([...next]));
+      }
+      return next;
+    });
     setDeckIndex(0);
   }
 
