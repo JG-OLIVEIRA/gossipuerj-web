@@ -499,6 +499,14 @@ export const api = {
     return this.getAllCrushes(page, size, sort, token);
   },
 
+  getGalleryCrushes(token: string, page = 0, size = 60, sort?: string[]): Promise<PageResponseCrushResponse> {
+    const sortQuery = sort && sort.length ? `&${sort.map((s) => `sort=${encodeURIComponent(s)}`).join("&")}` : "";
+    return request<PageResponseCrushResponse>(
+      `/api/v1/crushes/gallery?page=${page}&size=${size}${sortQuery}`,
+      { method: "GET", headers: { Authorization: `Bearer ${token}` } }
+    );
+  },
+
   createCrush(token: string, data: CrushRequest): Promise<CrushResponse> {
     const payload = {
       photoUrl: data.photoUrl,

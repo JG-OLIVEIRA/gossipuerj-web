@@ -66,33 +66,6 @@ function getMatchProfile(match: MatchResponse, myCrushId?: string | null): Crush
   };
 }
 
-async function getUnmatchedCrushes(
-  token: string,
-  crushes: CrushResponse[],
-  myCrushId: string
-): Promise<CrushResponse[]> {
-  const visibleCrushes: CrushResponse[] = [];
-
-  for (const crush of crushes) {
-    if (crush.id === myCrushId) continue;
-
-    try {
-      const rejectedMatch = await api.getCrushMatch(token, crush.id, "REJECTED");
-      if (!rejectedMatch) {
-        visibleCrushes.push(crush);
-      }
-    } catch (error) {
-      if (error instanceof ApiError && error.status === 404) {
-        visibleCrushes.push(crush);
-      } else {
-        throw error;
-      }
-    }
-  }
-
-  return visibleCrushes;
-}
-
 const genderLabels: Record<Gender, string> = {
   MALE: "Masculino",
   FEMALE: "Feminino",
@@ -247,17 +220,11 @@ export default function CrushesPage() {
         const myCrush = await api.getMyCrush(savedToken);
         setMyCrushId(myCrush.id);
         setMyCrushPhotoUrl(myCrush.photoUrl);
-        const crushesPage = await api.getAllCrushes(0, 60, undefined, savedToken);
+        const crushesPage = await api.getGalleryCrushes(savedToken, 0, 60);
 
         if (!active) return;
 
-        const visibleCrushes = await getUnmatchedCrushes(
-          savedToken,
-          crushesPage?.content ?? [],
-          myCrush.id
-        );
-
-        setCrushes(visibleCrushes);
+        setCrushes(crushesPage?.content ?? []);
         setAccessState("ready");
       } catch (err: unknown) {
         if (active) {
@@ -291,14 +258,8 @@ export default function CrushesPage() {
         return;
       }
 
-      const data = await api.getAllCrushes(0, 60, undefined, token);
-      const visibleCrushes = await getUnmatchedCrushes(
-        token,
-        data?.content ?? [],
-        myCrushId ?? ""
-      );
-
-      setCrushes(visibleCrushes);
+      const data = await api.getGalleryCrushes(token, 0, 60);
+      setCrushes(data?.content ?? []);
     } catch (err: unknown) {
       if (err instanceof ApiError && err.status === 403 && !token) {
         setCrushError("AUTH_REQUIRED");
@@ -439,7 +400,7 @@ export default function CrushesPage() {
         : [savedCrush, ...prev]);
       setMyCrushId(savedCrush.id);
       setMyCrushPhotoUrl(savedCrush.photoUrl);
-      const crushesPage = await api.getAllCrushes(0, 60, undefined, token);
+      const crushesPage = await api.getGalleryCrushes(token, 0, 60);
       setCrushes(crushesPage?.content ?? []);
       setDeckIndex(0);
       setAccessState("ready");
