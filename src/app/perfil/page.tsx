@@ -124,7 +124,7 @@ export default function PerfilPage() {
             // Buscar contagem de curtidas acumuladas em paralelo
             const likesPromises = posts.map(async (p) => {
               try {
-                const count = await api.getTotalPostLikes(p.id);
+                const count = await api.getTotalPostLikes(token, p.id);
                 return typeof count === "number" ? count : 0;
               } catch {
                 return 0;

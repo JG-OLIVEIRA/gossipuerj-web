@@ -154,7 +154,7 @@ export default function FeedPage() {
           await Promise.all(
             batch.map(async (p) => {
               try {
-                const count = await api.getTotalPostLikes(p.id);
+                const count = await api.getTotalPostLikes(token, p.id);
                 likesMap[p.id] = typeof count === "number" ? count : 0;
               } catch {
                 likesMap[p.id] = 0;
@@ -877,11 +877,6 @@ export default function FeedPage() {
                     onDelete={handleDelete}
                     isDeleting={deletingPostId === post.id}
                     onError={setError}
-                    onSelectCourse={(course) => {
-                      setSelectedCourseFilter(course);
-                      setSelectedFloor(null);
-                      triggerToast(`Filtrando fofocas de ${course}`, "🎓");
-                    }}
                   />
                 ))
               )}

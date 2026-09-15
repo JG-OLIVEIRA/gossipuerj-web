@@ -161,7 +161,7 @@ export default function UerjBuildingSidebar({
       )}
 
       <div className="building-floor-list">
-        {floorStats.map(({ floor, gossipCount, crushCount, posts: floorPosts }) => {
+        {floorStats.map(({ floor }) => {
           const isUserFloor = userFloor?.floor === floor.floor;
           const isOpen = openFloor === floor.floor;
           const isFilterActive = selectedFloor === floor.floor;
@@ -181,13 +181,6 @@ export default function UerjBuildingSidebar({
                 <span className="floor-label">{floor.label}</span>
                 {isUserFloor && <span className="floor-user-mark" title="Andar do seu curso">você</span>}
                 {isFilterActive && <span className="floor-active-mark" title="Feed filtrado neste andar">ativo</span>}
-                {false && (
-                  <span className="floor-counts">
-                    {gossipCount > 0 && <span title={`${gossipCount} fofocas deste andar`}>{gossipCount} 🔥</span>}
-                    {gossipCount > 0 && crushCount > 0 && " · "}
-                    {crushCount > 0 && <span title={`${crushCount} crushes cadastrados`}>{crushCount} 💘</span>}
-                  </span>
-                )}
                 <span className="floor-chevron">{isOpen ? "−" : "+"}</span>
               </button>
 

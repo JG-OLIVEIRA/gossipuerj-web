@@ -2,7 +2,6 @@
 
 import { FormEvent, useEffect, useState } from "react";
 import { api, ApiError, CommentResponse, PostResponse } from "../../lib/api";
-import { findFloorForCourse } from "./uerj-building-sidebar";
 
 type PostCardProps = {
   post: PostResponse;
@@ -11,7 +10,6 @@ type PostCardProps = {
   onDelete: (postId: string) => void;
   isDeleting: boolean;
   onError: (msg: string) => void;
-  onSelectCourse?: (courseName: string) => void;
 };
 
 function getPrivatePhotoUrl(photoUrl?: string | null): string | null {
@@ -36,7 +34,6 @@ export default function PostCard({
   onDelete,
   isDeleting,
   onError,
-  onSelectCourse,
 }: PostCardProps) {
   const [likesCount, setLikesCount] = useState<number>(0);
   const [isLiking, setIsLiking] = useState(false);
@@ -65,8 +62,10 @@ export default function PostCard({
     async function loadLikes() {
       await Promise.resolve();
       if (!active) return;
+      const token = localStorage.getItem("gossipuerj_token");
+      if (!token) return;
       try {
-        const total = await api.getTotalPostLikes(post.id);
+        const total = await api.getTotalPostLikes(token, post.id);
         if (active) setLikesCount(typeof total === "number" ? total : 0);
       } catch {
         // Falhas ao carregar contagem inicial de likes são ignoradas
@@ -104,7 +103,7 @@ export default function PostCard({
       if (typeof res?.totalLikes === "number") {
         setLikesCount(res.totalLikes);
       } else {
-        const total = await api.getTotalPostLikes(post.id);
+        const total = await api.getTotalPostLikes(token, post.id);
         if (typeof total === "number") setLikesCount(total);
       }
     } catch (err) {
@@ -224,7 +223,7 @@ export default function PostCard({
       if (typeof res?.totalLikes === "number") {
         setCommentLikes((prev) => ({ ...prev, [commentId]: res.totalLikes! }));
       } else {
-        const total = await api.getTotalCommentLikes(post.id, commentId);
+        const total = await api.getTotalCommentLikes(token, post.id, commentId);
         setCommentLikes((prev) => ({ ...prev, [commentId]: typeof total === "number" ? total : 0 }));
       }
     } catch (err) {

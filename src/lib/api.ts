@@ -396,13 +396,14 @@ export const api = {
   // ==========================================
   // Like Controller (/api/v1/posts/.../likes)
   // ==========================================
-  getTotalPostLikes(postId: string): Promise<number> {
+  getTotalPostLikes(token: string, postId: string): Promise<number> {
     return request<number>(`/api/v1/posts/${encodeURIComponent(postId)}/likes`, {
       method: "GET",
+      headers: { Authorization: `Bearer ${token}` },
     });
   },
-  getPostLikes(postId: string): Promise<number> {
-    return this.getTotalPostLikes(postId);
+  getPostLikes(token: string, postId: string): Promise<number> {
+    return this.getTotalPostLikes(token, postId);
   },
 
   togglePostLike(token: string, postId: string): Promise<LikeToggleResponse> {
@@ -412,14 +413,14 @@ export const api = {
     });
   },
 
-  getTotalCommentLikes(postId: string, commentId: string): Promise<number> {
+  getTotalCommentLikes(token: string, postId: string, commentId: string): Promise<number> {
     return request<number>(
       `/api/v1/posts/${encodeURIComponent(postId)}/comments/${encodeURIComponent(commentId)}/likes`,
-      { method: "GET" }
+      { method: "GET", headers: { Authorization: `Bearer ${token}` } }
     );
   },
-  getCommentLikes(postId: string, commentId: string): Promise<number> {
-    return this.getTotalCommentLikes(postId, commentId);
+  getCommentLikes(token: string, postId: string, commentId: string): Promise<number> {
+    return this.getTotalCommentLikes(token, postId, commentId);
   },
 
   toggleCommentLike(token: string, postId: string, commentId: string): Promise<LikeToggleResponse> {
