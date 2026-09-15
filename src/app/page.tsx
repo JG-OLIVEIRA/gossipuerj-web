@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useState, useMemo } from "react";
+import { ChangeEvent, FormEvent, useEffect, useState, useMemo } from "react";
 import Link from "next/link";
 import { api, ApiError, CrushResponse, Post, PostCategory } from "../lib/api";
 import PostCard from "./components/post-card";
@@ -24,6 +24,20 @@ const categories: { value: PostCategory; label: string; icon: string }[] = [
 const categoryIcons = Object.fromEntries(categories.map((c) => [c.value, c.icon]));
 const categoryLabels = Object.fromEntries(categories.map((c) => [c.value, c.label]));
 
+function getPrivatePhotoUrl(photoUrl?: string | null): string | null {
+  if (!photoUrl) return null;
+
+  try {
+    const parsedUrl = new URL(photoUrl);
+    if (parsedUrl.protocol === "http:" || parsedUrl.protocol === "https:") {
+      return `/api/upload?url=${encodeURIComponent(photoUrl)}`;
+    }
+  } catch {
+    // relative/local path already usable
+  }
+
+  return photoUrl;
+}
 
 export default function FeedPage() {
   const [posts, setPosts] = useState<Post[]>([]);
@@ -31,6 +45,9 @@ export default function FeedPage() {
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
   const [category, setCategory] = useState<PostCategory>("CONFESSION");
+  const [photoUrl, setPhotoUrl] = useState("");
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+  const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
@@ -187,6 +204,39 @@ export default function FeedPage() {
     }
   }
 
+  async function handlePhotoUpload(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setIsUploadingPhoto(true);
+    setError("");
+
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const response = await fetch("/api/upload", {
+        method: "POST",
+        body: formData,
+      });
+
+      const payload = (await response.json().catch(() => ({}))) as { url?: string; error?: string };
+      if (!response.ok || !payload.url) {
+        throw new Error(payload.error || "Não foi possível enviar a imagem para a publicação.");
+      }
+
+      const nextPhotoUrl = payload.url;
+      setPhotoUrl(nextPhotoUrl);
+      setPhotoPreview(getPrivatePhotoUrl(nextPhotoUrl));
+      triggerToast("Imagem anexada à fofoca!", "🖼️");
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : "Não foi possível anexar a imagem.");
+    } finally {
+      setIsUploadingPhoto(false);
+      event.target.value = "";
+    }
+  }
+
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const token = localStorage.getItem("gossipuerj_token");
@@ -200,12 +250,19 @@ export default function FeedPage() {
     setError("");
 
     try {
-      const post = await api.create(token, { title, content, category });
+      const post = await api.create(token, {
+        title: title.trim(),
+        content: content.trim(),
+        category,
+        ...(photoUrl ? { photoUrl } : {}),
+      });
       setPosts((currentPosts) => [post, ...currentPosts]);
       setMyPostIds((currentIds) => new Set(currentIds).add(post.id));
       setTitle("");
       setContent("");
       setCategory("CONFESSION");
+      setPhotoUrl("");
+      setPhotoPreview(null);
       triggerToast("Fofoca publicada no campus com sucesso!", "📢");
     } catch (requestError) {
       const isMissingAuthenticatedUser =
@@ -593,6 +650,75 @@ export default function FeedPage() {
               aria-label="Conteúdo da publicação"
               required
             />
+
+            {photoPreview && (
+              <div style={{ marginTop: "12px", marginBottom: "8px", position: "relative" }}>
+                <img
+                  src={photoPreview}
+                  alt="Pré-visualização da fofoca"
+                  style={{
+                    width: "100%",
+                    maxHeight: "260px",
+                    objectFit: "cover",
+                    borderRadius: "16px",
+                    border: "1px solid rgba(186, 70, 115, 0.18)",
+                    display: "block",
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPhotoUrl("");
+                    setPhotoPreview(null);
+                  }}
+                  style={{
+                    position: "absolute",
+                    top: "10px",
+                    right: "10px",
+                    border: "none",
+                    borderRadius: "999px",
+                    padding: "6px 10px",
+                    background: "rgba(17, 17, 17, 0.72)",
+                    color: "#fff",
+                    cursor: "pointer",
+                    fontWeight: 700,
+                  }}
+                >
+                  Remover
+                </button>
+              </div>
+            )}
+
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", marginTop: "8px" }}>
+              <label
+                className="pink-button"
+                style={{
+                  margin: 0,
+                  width: "auto",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  cursor: "pointer",
+                  opacity: isUploadingPhoto ? 0.7 : 1,
+                }}
+              >
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={handlePhotoUpload}
+                  disabled={isUploadingPhoto}
+                  style={{ display: "none" }}
+                />
+                {isUploadingPhoto ? "ENVIANDO..." : "📷 ADICIONAR IMAGEM"}
+              </label>
+              {photoUrl ? (
+                <span style={{ fontSize: "11px", color: "#666", fontWeight: 700 }}>
+                  Imagem anexada
+                </span>
+              ) : (
+                <span style={{ fontSize: "11px", color: "#888" }}>Sem imagem</span>
+              )}
+            </div>
 
             <div className="feed-create-footer">
               <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>

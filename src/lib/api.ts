@@ -92,6 +92,7 @@ export type PostRequest = {
   title: string;
   content: string;
   category: PostCategory;
+  photoUrl?: string;
 };
 
 export type PostResponse = {
@@ -100,6 +101,7 @@ export type PostResponse = {
   courseName?: string;
   content: string;
   category: PostCategory;
+  photoUrl?: string;
   createdAt: string;
   updatedAt: string;
 };

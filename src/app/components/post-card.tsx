@@ -14,6 +14,21 @@ type PostCardProps = {
   onSelectCourse?: (courseName: string) => void;
 };
 
+function getPrivatePhotoUrl(photoUrl?: string | null): string | null {
+  if (!photoUrl) return null;
+
+  try {
+    const parsedUrl = new URL(photoUrl);
+    if (parsedUrl.protocol === "http:" || parsedUrl.protocol === "https:") {
+      return `/api/upload?url=${encodeURIComponent(photoUrl)}`;
+    }
+  } catch {
+    // relative/local path already usable
+  }
+
+  return photoUrl;
+}
+
 export default function PostCard({
   post,
   categoryLabel,
@@ -301,6 +316,18 @@ function formatPostDate(dateStr: string) {
       </div>
 
       <h2 className="post-title">{post.title}</h2>
+      {post.photoUrl && (() => {
+        const preview = getPrivatePhotoUrl(post.photoUrl);
+        return preview ? (
+          <div style={{ margin: "12px 0", borderRadius: "16px", overflow: "hidden", border: "1px solid rgba(186, 70, 115, 0.18)" }}>
+            <img
+              src={preview}
+              alt="Imagem da publicação"
+              style={{ display: "block", width: "100%", maxHeight: "320px", objectFit: "cover" }}
+            />
+          </div>
+        ) : null;
+      })()}
       <p className="post-content">{post.content}</p>
 
       <div className="post-footer">
