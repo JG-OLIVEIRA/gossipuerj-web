@@ -436,21 +436,21 @@ export const api = {
   // ==========================================
   // Comment Controller (/api/v1/posts/.../comments)
   // ==========================================
-  getPostComments(postId: string, page = 0, size = 100, sort?: string[]): Promise<PageResponseCommentResponse> {
+  getPostComments(token: string, postId: string, page = 0, size = 100, sort?: string[]): Promise<PageResponseCommentResponse> {
     const sortQuery = sort && sort.length ? `&${sort.map((s) => `sort=${encodeURIComponent(s)}`).join("&")}` : "";
     return request<PageResponseCommentResponse>(
       `/api/v1/posts/${encodeURIComponent(postId)}/comments?page=${page}&size=${size}${sortQuery}`,
-      { method: "GET" }
+      { method: "GET", headers: { Authorization: `Bearer ${token}` } }
     );
   },
-  comments(postId: string): Promise<PageResponseCommentResponse> {
-    return this.getPostComments(postId);
+  comments(token: string, postId: string): Promise<PageResponseCommentResponse> {
+    return this.getPostComments(token, postId);
   },
 
-  getComment(postId: string, commentId: string): Promise<CommentResponse> {
+  getComment(token: string, postId: string, commentId: string): Promise<CommentResponse> {
     return request<CommentResponse>(
       `/api/v1/posts/${encodeURIComponent(postId)}/comments/${encodeURIComponent(commentId)}`,
-      { method: "GET" }
+      { method: "GET", headers: { Authorization: `Bearer ${token}` } }
     );
   },
 
@@ -462,15 +462,15 @@ export const api = {
     });
   },
 
-  getReplies(postId: string, commentId: string, page = 0, size = 50, sort?: string[]): Promise<PageResponseCommentResponse> {
+  getReplies(token: string, postId: string, commentId: string, page = 0, size = 50, sort?: string[]): Promise<PageResponseCommentResponse> {
     const sortQuery = sort && sort.length ? `&${sort.map((s) => `sort=${encodeURIComponent(s)}`).join("&")}` : "";
     return request<PageResponseCommentResponse>(
       `/api/v1/posts/${encodeURIComponent(postId)}/comments/${encodeURIComponent(commentId)}/replies?page=${page}&size=${size}${sortQuery}`,
-      { method: "GET" }
+      { method: "GET", headers: { Authorization: `Bearer ${token}` } }
     );
   },
-  getCommentReplies(postId: string, commentId: string): Promise<PageResponseCommentResponse> {
-    return this.getReplies(postId, commentId);
+  getCommentReplies(token: string, postId: string, commentId: string): Promise<PageResponseCommentResponse> {
+    return this.getReplies(token, postId, commentId);
   },
 
   replyComment(token: string, postId: string, commentId: string, data: CommentRequest): Promise<CommentResponse> {

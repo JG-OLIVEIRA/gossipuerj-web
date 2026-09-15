@@ -117,9 +117,15 @@ export default function PostCard({
   }
 
   async function loadComments(page = 0) {
+    const token = localStorage.getItem("gossipuerj_token");
+    if (!token) {
+      onError("Entre na sua conta para ver os comentários.");
+      return;
+    }
+
     if (page === 0) setIsLoadingComments(true);
     try {
-      const data = await api.getPostComments(post.id, page, COMMENT_PAGE_SIZE);
+      const data = await api.getPostComments(token, post.id, page, COMMENT_PAGE_SIZE);
       if (page === 0) {
         setComments(data.content ?? []);
       } else {
@@ -136,10 +142,13 @@ export default function PostCard({
 
   async function loadMoreComments() {
     if (isLoadingMoreComments || !hasMoreComments) return;
+    const token = localStorage.getItem("gossipuerj_token");
+    if (!token) return;
+
     setIsLoadingMoreComments(true);
     try {
       const nextPage = commentPage + 1;
-      const data = await api.getPostComments(post.id, nextPage, COMMENT_PAGE_SIZE);
+      const data = await api.getPostComments(token, post.id, nextPage, COMMENT_PAGE_SIZE);
       setComments((prev) => [...prev, ...(data.content ?? [])]);
       setCommentPage(nextPage);
       setHasMoreComments(!data.last);
