@@ -289,15 +289,40 @@ function normalizeMatch(match?: Partial<MatchResponse> | null): MatchResponse | 
   };
 }
 
+const REQUEST_CACHE_TTL_MS = 10000;
+const requestCache = new Map<string, { expiresAt: number; value: unknown }>();
+
+function requestCacheKey(path: string, options: RequestInit = {}): string {
+  const method = (options.method || "GET").toUpperCase();
+  const headers = (options.headers as Record<string, string> | undefined) ?? {};
+  return `${method}:${path}:${headers.Authorization ?? "anonymous"}`;
+}
+
+function clearRequestCache() {
+  requestCache.clear();
+}
+
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
+  const method = (options.method || "GET").toUpperCase();
   const headers: Record<string, string> = {};
   if (options.body) {
     headers["Content-Type"] = "application/json";
   }
 
+  const requestHeaders = { ...headers, ...(options.headers as Record<string, string> | undefined) };
+
+  if (method === "GET") {
+    const cacheKey = requestCacheKey(path, { ...options, headers: requestHeaders });
+    const cached = requestCache.get(cacheKey);
+    const now = Date.now();
+    if (cached && cached.expiresAt > now) {
+      return cached.value as T;
+    }
+  }
+
   const response = await fetch(`${API_URL}${path}`, {
     ...options,
-    headers: { ...headers, ...(options.headers as Record<string, string> | undefined) },
+    headers: requestHeaders,
   });
 
   if (!response.ok) {
@@ -326,9 +351,19 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   }
 
   try {
-    return JSON.parse(text) as T;
+    const parsed = JSON.parse(text) as T;
+    if (method === "GET") {
+      const cacheKey = requestCacheKey(path, { ...options, headers: requestHeaders });
+      requestCache.set(cacheKey, { expiresAt: Date.now() + REQUEST_CACHE_TTL_MS, value: parsed });
+    }
+    return parsed;
   } catch {
-    return text as unknown as T;
+    const parsed = text as unknown as T;
+    if (method === "GET") {
+      const cacheKey = requestCacheKey(path, { ...options, headers: requestHeaders });
+      requestCache.set(cacheKey, { expiresAt: Date.now() + REQUEST_CACHE_TTL_MS, value: parsed });
+    }
+    return parsed;
   }
 }
 
@@ -349,12 +384,14 @@ export const api = {
     return this.getAll(page, size, undefined, token);
   },
 
-  create(token: string, data: PostRequest): Promise<PostResponse> {
-    return request<PostResponse>("/api/v1/posts", {
+  async create(token: string, data: PostRequest): Promise<PostResponse> {
+    const created = await request<PostResponse>("/api/v1/posts", {
       method: "POST",
       headers: { Authorization: `Bearer ${token}` },
       body: JSON.stringify(data),
     });
+    clearRequestCache();
+    return created;
   },
   createPost(token: string, data: PostRequest): Promise<PostResponse> {
     return this.create(token, data);
@@ -369,11 +406,12 @@ export const api = {
     return this.getById(postId);
   },
 
-  delete(token: string, postId: string): Promise<void> {
-    return request<void>(`/api/v1/posts/${encodeURIComponent(postId)}`, {
+  async delete(token: string, postId: string): Promise<void> {
+    await request<void>(`/api/v1/posts/${encodeURIComponent(postId)}`, {
       method: "DELETE",
       headers: { Authorization: `Bearer ${token}` },
     });
+    clearRequestCache();
   },
   deletePost(token: string, postId: string): Promise<void> {
     return this.delete(token, postId);
@@ -406,11 +444,13 @@ export const api = {
     return this.getTotalPostLikes(token, postId);
   },
 
-  togglePostLike(token: string, postId: string): Promise<LikeToggleResponse> {
-    return request<LikeToggleResponse>(`/api/v1/posts/${encodeURIComponent(postId)}/likes`, {
+  async togglePostLike(token: string, postId: string): Promise<LikeToggleResponse> {
+    const response = await request<LikeToggleResponse>(`/api/v1/posts/${encodeURIComponent(postId)}/likes`, {
       method: "POST",
       headers: { Authorization: `Bearer ${token}` },
     });
+    clearRequestCache();
+    return response;
   },
 
   getTotalCommentLikes(token: string, postId: string, commentId: string): Promise<number> {
@@ -423,14 +463,16 @@ export const api = {
     return this.getTotalCommentLikes(token, postId, commentId);
   },
 
-  toggleCommentLike(token: string, postId: string, commentId: string): Promise<LikeToggleResponse> {
-    return request<LikeToggleResponse>(
+  async toggleCommentLike(token: string, postId: string, commentId: string): Promise<LikeToggleResponse> {
+    const response = await request<LikeToggleResponse>(
       `/api/v1/posts/${encodeURIComponent(postId)}/comments/${encodeURIComponent(commentId)}/likes`,
       {
         method: "POST",
         headers: { Authorization: `Bearer ${token}` },
       }
     );
+    clearRequestCache();
+    return response;
   },
 
   // ==========================================
@@ -454,12 +496,14 @@ export const api = {
     );
   },
 
-  createComment(token: string, postId: string, data: CommentRequest): Promise<CommentResponse> {
-    return request<CommentResponse>(`/api/v1/posts/${encodeURIComponent(postId)}/comments`, {
+  async createComment(token: string, postId: string, data: CommentRequest): Promise<CommentResponse> {
+    const created = await request<CommentResponse>(`/api/v1/posts/${encodeURIComponent(postId)}/comments`, {
       method: "POST",
       headers: { Authorization: `Bearer ${token}` },
       body: JSON.stringify(data),
     });
+    clearRequestCache();
+    return created;
   },
 
   getReplies(token: string, postId: string, commentId: string, page = 0, size = 50, sort?: string[]): Promise<PageResponseCommentResponse> {
@@ -473,8 +517,8 @@ export const api = {
     return this.getReplies(token, postId, commentId);
   },
 
-  replyComment(token: string, postId: string, commentId: string, data: CommentRequest): Promise<CommentResponse> {
-    return request<CommentResponse>(
+  async replyComment(token: string, postId: string, commentId: string, data: CommentRequest): Promise<CommentResponse> {
+    const created = await request<CommentResponse>(
       `/api/v1/posts/${encodeURIComponent(postId)}/comments/${encodeURIComponent(commentId)}/replies`,
       {
         method: "POST",
@@ -482,6 +526,8 @@ export const api = {
         body: JSON.stringify(data),
       }
     );
+    clearRequestCache();
+    return created;
   },
 
   // ==========================================
