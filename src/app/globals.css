@@ -3533,7 +3533,13 @@ article.post-card {
   .post-tags-row { min-width:0; width:100%; }
   .post-meta-right { justify-content:space-between; margin-left:0; width:100%; }
   .post-date-badge { overflow-wrap:anywhere; }
-  .post-meta-right .delete-post { position:absolute; right:0; top:0; }
+  .post-meta-right .delete-post {
+    align-self: flex-start;
+    min-height: 42px;
+    padding: 9px 10px;
+    position: static;
+    white-space: nowrap;
+  }
   .post-course-tag { max-width:100%; }
   .post-actions { gap:8px; width:100%; }
   .action-btn { flex:1 1 0; justify-content:center; min-width:0; padding:9px 8px; }
