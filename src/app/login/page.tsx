@@ -165,6 +165,15 @@ export default function LoginPage() {
         (requestError.message.toLowerCase().includes("não foi encontrado") || requestError.status === 404)
       ) {
         setError("Não encontramos uma conta cadastrada com esse email institucional.");
+      } else if (
+        requestError instanceof ApiError &&
+        (requestError.message.toLowerCase().includes("não está verificado") ||
+          requestError.message.toLowerCase().includes("not verified") ||
+          requestError.message.toLowerCase().includes("não verificado"))
+      ) {
+        setVerificationEmail(email);
+        setNeedsVerification(true);
+        setMessage("Seu email ainda não foi verificado. Digite o código recebido ou reenvie um novo código.");
       } else {
         setError(getFriendlyError(requestError, "Não foi possível concluir a solicitação."));
       }
