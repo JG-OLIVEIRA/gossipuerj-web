@@ -75,7 +75,6 @@ export default function UerjBuildingSidebar({
   });
 
   const topGossipFloor = [...floorStats].sort((a, b) => b.gossipCount - a.gossipCount)[0];
-  const topCrushFloor = [...floorStats].sort((a, b) => b.crushCount - a.crushCount)[0];
 
   const activeFloorObj = selectedFloor
     ? UERJ_BUILDING_FLOORS.find((f) => f.floor === selectedFloor)
@@ -146,16 +145,10 @@ export default function UerjBuildingSidebar({
         </div>
       )}
 
-      <div className="building-ranking" aria-label="Ranking de andares">
+      <div className="building-ranking" aria-label="Andar mais engajado">
         <div>
-          <span>🔥 Mais fofocas</span>
-          <strong>{topGossipFloor.gossipCount > 0 ? topGossipFloor.floor.label : "Sem localização"}</strong>
-          <small>{topGossipFloor.gossipCount} no campus</small>
-        </div>
-        <div>
-          <span>💘 Mais Crushes</span>
-          <strong>{topCrushFloor.crushCount > 0 ? topCrushFloor.floor.label : "Ainda sem dados"}</strong>
-          <small>{topCrushFloor.crushCount} perfis</small>
+          <span>🔥 Mais engajado</span>
+          <strong>{topGossipFloor.gossipCount > 0 ? topGossipFloor.floor.label : "Sem atividade"}</strong>
         </div>
       </div>
 
@@ -188,7 +181,7 @@ export default function UerjBuildingSidebar({
                 <span className="floor-label">{floor.label}</span>
                 {isUserFloor && <span className="floor-user-mark" title="Andar do seu curso">você</span>}
                 {isFilterActive && <span className="floor-active-mark" title="Feed filtrado neste andar">ativo</span>}
-                {(gossipCount > 0 || crushCount > 0) && (
+                {false && (
                   <span className="floor-counts">
                     {gossipCount > 0 && <span title={`${gossipCount} fofocas deste andar`}>{gossipCount} 🔥</span>}
                     {gossipCount > 0 && crushCount > 0 && " · "}
@@ -240,29 +233,6 @@ export default function UerjBuildingSidebar({
                     </button>
                   </div>
 
-                  {/* Prévia de Fofocas Atuais do Andar */}
-                  {floorPosts.length > 0 && (
-                    <div className="floor-recent-posts">
-                      <span style={{ fontSize: "9px", fontWeight: 800, textTransform: "uppercase", color: "#777" }}>
-                        Fofocas recentes deste nível ({floorPosts.length}):
-                      </span>
-                      {floorPosts.slice(0, 3).map((p) => (
-                        <div
-                          key={p.id}
-                          className="floor-post-mini"
-                          onClick={() => handleFilterFloor(floor.floor)}
-                          title="Clique para focar no feed deste andar"
-                        >
-                          <span style={{ fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                            {p.title}
-                          </span>
-                          <span style={{ fontSize: "9px", color: "#888", whiteSpace: "nowrap" }}>
-                            {p.courseName ? p.courseName.split(" ")[0] : "UERJ"}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
                 </div>
               )}
             </div>

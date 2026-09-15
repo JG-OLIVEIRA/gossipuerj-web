@@ -275,25 +275,6 @@ function formatPostDate(dateStr: string) {
             <span>{icon}</span>
             <span>{categoryLabel}</span>
           </span>
-          <span className="post-anonymous-badge">
-            🔒 ANÔNIMO
-          </span>
-          {post.courseName && (
-            <button
-              type="button"
-              className="post-course-tag"
-              onClick={() => onSelectCourse?.(post.courseName!)}
-              title={`Clique para filtrar fofocas de ${post.courseName}`}
-            >
-              <span>🎓</span>
-              <span>{post.courseName}</span>
-              {findFloorForCourse(post.courseName) && (
-                <span className="post-course-floor-pill">
-                  {findFloorForCourse(post.courseName)?.floor}º and.
-                </span>
-              )}
-            </button>
-          )}
         </div>
 
         <div className="post-meta-right">

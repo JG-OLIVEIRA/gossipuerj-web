@@ -691,7 +691,7 @@ export default function FeedPage() {
 
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", marginTop: "8px" }}>
               <label
-                className="pink-button"
+                className="gray-button"
                 style={{
                   margin: 0,
                   width: "auto",
