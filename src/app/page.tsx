@@ -2,7 +2,7 @@
 
 import { ChangeEvent, FormEvent, useEffect, useState, useMemo } from "react";
 import Link from "next/link";
-import { api, ApiError, CrushResponse, Post, PostCategory } from "../lib/api";
+import { api, ApiError, CommentResponse, CrushResponse, Post, PostCategory } from "../lib/api";
 import PostCard from "./components/post-card";
 import SiteFooter from "./components/site-footer";
 import SiteHeader from "./components/site-header";
@@ -53,6 +53,7 @@ export default function FeedPage() {
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [error, setError] = useState("");
   const [deletingPostId, setDeletingPostId] = useState("");
+  const [commentsByPost, setCommentsByPost] = useState<Record<string, CommentResponse[]>>({});
   const [postLikesMap, setPostLikesMap] = useState<Record<string, number>>({});
   const [currentPage, setCurrentPage] = useState(0);
   const [hasMore, setHasMore] = useState(false);
@@ -144,6 +145,21 @@ export default function FeedPage() {
         setPosts(loadedPosts);
         setCurrentPage(0);
         setHasMore(!pageData.last);
+
+        const nextCommentsByPost: Record<string, CommentResponse[]> = {};
+        if (token) {
+          await Promise.all(
+            loadedPosts.map(async (p) => {
+              try {
+                const commentsPage = await api.getPostComments(token, p.id, 0, 20);
+                nextCommentsByPost[p.id] = commentsPage.content ?? [];
+              } catch {
+                nextCommentsByPost[p.id] = [];
+              }
+            })
+          );
+        }
+        if (active) setCommentsByPost(nextCommentsByPost);
 
         // Carregar contagem inicial de likes para ordenação em lotes suaves
         const likesMap: Record<string, number> = {};
@@ -872,6 +888,7 @@ export default function FeedPage() {
                   <PostCard
                     key={post.id}
                     post={post}
+                    initialComments={commentsByPost[post.id] ?? []}
                     categoryLabel={categoryLabels[post.category] ?? post.category}
                     isMyPost={myPostIds.has(post.id)}
                     onDelete={handleDelete}

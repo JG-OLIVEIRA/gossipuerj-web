@@ -5,6 +5,7 @@ import { api, ApiError, CommentResponse, PostResponse } from "../../lib/api";
 
 type PostCardProps = {
   post: PostResponse;
+  initialComments?: CommentResponse[];
   categoryLabel: string;
   isMyPost: boolean;
   onDelete: (postId: string) => void;
@@ -29,6 +30,7 @@ function getPrivatePhotoUrl(photoUrl?: string | null): string | null {
 
 export default function PostCard({
   post,
+  initialComments = [],
   categoryLabel,
   isMyPost,
   onDelete,
@@ -40,7 +42,7 @@ export default function PostCard({
   const [hasLiked, setHasLiked] = useState(false);
 
   const [showComments, setShowComments] = useState(false);
-  const [comments, setComments] = useState<CommentResponse[]>([]);
+  const [comments, setComments] = useState<CommentResponse[]>(() => initialComments);
   const [isLoadingComments, setIsLoadingComments] = useState(false);
   const [newCommentText, setNewCommentText] = useState("");
   const [isSubmittingComment, setIsSubmittingComment] = useState(false);
@@ -78,6 +80,30 @@ export default function PostCard({
     };
   }, [post.id]);
 
+  async function loadComments(page = 0) {
+    const token = localStorage.getItem("gossipuerj_token");
+    if (!token) {
+      onError("Entre na sua conta para ver os comentários.");
+      return;
+    }
+
+    if (page === 0) setIsLoadingComments(true);
+    try {
+      const data = await api.getPostComments(token, post.id, page, COMMENT_PAGE_SIZE);
+      if (page === 0) {
+        setComments(data.content ?? []);
+      } else {
+        setComments((prev) => [...prev, ...(data.content ?? [])]);
+      }
+      setCommentPage(page);
+      setHasMoreComments(!data.last);
+    } catch (err) {
+      onError(err instanceof ApiError ? err.message : "Não foi possível carregar os comentários.");
+    } finally {
+      setIsLoadingComments(false);
+    }
+  }
+
   async function handleToggleLike() {
     const token = localStorage.getItem("gossipuerj_token");
     if (!token) {
@@ -113,30 +139,6 @@ export default function PostCard({
       onError(err instanceof ApiError ? err.message : "Não foi possível curtir a publicação.");
     } finally {
       setIsLiking(false);
-    }
-  }
-
-  async function loadComments(page = 0) {
-    const token = localStorage.getItem("gossipuerj_token");
-    if (!token) {
-      onError("Entre na sua conta para ver os comentários.");
-      return;
-    }
-
-    if (page === 0) setIsLoadingComments(true);
-    try {
-      const data = await api.getPostComments(token, post.id, page, COMMENT_PAGE_SIZE);
-      if (page === 0) {
-        setComments(data.content ?? []);
-      } else {
-        setComments((prev) => [...prev, ...(data.content ?? [])]);
-      }
-      setCommentPage(page);
-      setHasMoreComments(!data.last);
-    } catch (err) {
-      onError(err instanceof ApiError ? err.message : "Não foi possível carregar os comentários.");
-    } finally {
-      setIsLoadingComments(false);
     }
   }
 
