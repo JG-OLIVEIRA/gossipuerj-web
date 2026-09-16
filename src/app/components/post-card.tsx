@@ -53,6 +53,9 @@ export default function PostCard({
 
   const [commentLikes, setCommentLikes] = useState<Record<string, number>>({});
   const [isLikingComment, setIsLikingComment] = useState<Record<string, boolean>>({});
+  const [repliesByComment, setRepliesByComment] = useState<Record<string, CommentResponse[]>>({});
+  const [loadingReplies, setLoadingReplies] = useState<Record<string, boolean>>({});
+  const [expandedReplies, setExpandedReplies] = useState<Record<string, boolean>>({});
   const [commentPage, setCommentPage] = useState(0);
   const [hasMoreComments, setHasMoreComments] = useState(false);
   const [isLoadingMoreComments, setIsLoadingMoreComments] = useState(false);
@@ -207,14 +210,47 @@ export default function PostCard({
       const reply = await api.replyComment(token, post.id, commentId, {
         content: replyText.trim(),
       });
-      // Append reply optimistically; also refresh to keep in sync
-      setComments((prev) => [...prev, reply]);
+      setRepliesByComment((prev) => ({
+        ...prev,
+        [commentId]: [...(prev[commentId] ?? []), reply],
+      }));
+      setExpandedReplies((prev) => ({ ...prev, [commentId]: true }));
       setReplyText("");
       setReplyingToCommentId(null);
     } catch (err) {
       onError(err instanceof ApiError ? err.message : "Não foi possível responder ao comentário.");
     } finally {
       setIsSubmittingReply(false);
+    }
+  }
+
+  async function handleToggleReplies(commentId: string) {
+    const token = localStorage.getItem("gossipuerj_token");
+    if (!token) {
+      onError("Entre na sua conta para ver as respostas.");
+      return;
+    }
+
+    const isExpanded = expandedReplies[commentId] ?? false;
+    if (isExpanded) {
+      setExpandedReplies((prev) => ({ ...prev, [commentId]: false }));
+      return;
+    }
+
+    if (repliesByComment[commentId]) {
+      setExpandedReplies((prev) => ({ ...prev, [commentId]: true }));
+      return;
+    }
+
+    setLoadingReplies((prev) => ({ ...prev, [commentId]: true }));
+    try {
+      const data = await api.getReplies(token, post.id, commentId);
+      setRepliesByComment((prev) => ({ ...prev, [commentId]: data.content ?? [] }));
+      setExpandedReplies((prev) => ({ ...prev, [commentId]: true }));
+    } catch (err) {
+      onError(err instanceof ApiError ? err.message : "Não foi possível carregar as respostas.");
+    } finally {
+      setLoadingReplies((prev) => ({ ...prev, [commentId]: false }));
     }
   }
 
@@ -400,6 +436,18 @@ function formatPostDate(dateStr: string) {
                     >
                       ↩️ {replyingToCommentId === comment.id ? "cancelar" : "responder"}
                     </button>
+                    <button
+                      className="comment-action-link"
+                      type="button"
+                      onClick={() => handleToggleReplies(comment.id)}
+                      disabled={loadingReplies[comment.id]}
+                    >
+                      {loadingReplies[comment.id]
+                        ? "Carregando respostas..."
+                        : expandedReplies[comment.id]
+                          ? "Ocultar respostas"
+                          : "Ver respostas"}
+                    </button>
                   </div>
 
                   {replyingToCommentId === comment.id && (
@@ -419,6 +467,29 @@ function formatPostDate(dateStr: string) {
                       >
                         {isSubmittingReply ? "..." : "Enviar"}
                       </button>
+                    </div>
+                  )}
+
+                  {expandedReplies[comment.id] && (
+                    <div className="reply-list" aria-label="Respostas do comentário">
+                      {(repliesByComment[comment.id] ?? []).length === 0 ? (
+                        <p className="comment-empty">Nenhuma resposta ainda.</p>
+                      ) : (
+                        (repliesByComment[comment.id] ?? []).map((reply) => (
+                          <div key={reply.id} className="comment-item reply-item">
+                            <div className="comment-item-header">
+                              <div className="comment-author-badge">
+                                <span className="comment-author-avatar">A</span>
+                                <span className="comment-author">@anônimo</span>
+                              </div>
+                              <span className="comment-time">
+                                {reply.createdAt ? formatPostDate(reply.createdAt) : ""}
+                              </span>
+                            </div>
+                            <p className="comment-body">{reply.content}</p>
+                          </div>
+                        ))
+                      )}
                     </div>
                   )}
                 </div>
