@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useState, useMemo } from "react";
 import Link from "next/link";
 import {
   api,
@@ -12,6 +12,7 @@ import {
   Orientation,
   UserResponse,
 } from "../../lib/api";
+import { ALL_UERJ_COURSES } from "../../lib/uerj-courses";
 import SiteFooter from "../components/site-footer";
 import SiteHeader from "../components/site-header";
 
@@ -74,10 +75,8 @@ function getMatchCrushIds(matches: MatchResponse[]): Set<string> {
   );
 }
 
-function getVisibleCrushes(crushes: CrushResponse[], myCrushId: string, rejectedCrushIds: Set<string>): CrushResponse[] {
-  return crushes.filter(
-    (crush) => crush.id !== myCrushId && !rejectedCrushIds.has(crush.id)
-  );
+function getVisibleCrushes(crushes: CrushResponse[], myCrushId: string): CrushResponse[] {
+  return crushes.filter((crush) => crush.id !== myCrushId);
 }
 
 const genderLabels: Record<Gender, string> = {
@@ -88,12 +87,28 @@ const genderLabels: Record<Gender, string> = {
   OTHER: "Outro",
 };
 
+const genderIcons: Record<Gender, string> = {
+  MALE: "👨",
+  FEMALE: "👩",
+  TRANSGENDER: "⚧️",
+  NON_BINARY: "🧑",
+  OTHER: "✨",
+};
+
 const orientationLabels: Record<Orientation, string> = {
   HETEROSEXUAL: "Heterossexual",
   HOMOSEXUAL: "Homossexual",
   BISEXUAL: "Bissexual",
   ASEXUAL: "Assexual",
   PANSEXUAL: "Pansexual",
+};
+
+const orientationIcons: Record<Orientation, string> = {
+  HETEROSEXUAL: "👫",
+  HOMOSEXUAL: "👬",
+  BISEXUAL: "🌈",
+  ASEXUAL: "💜",
+  PANSEXUAL: "💖",
 };
 
 export default function CrushesPage() {
@@ -103,11 +118,15 @@ export default function CrushesPage() {
   const [myCrush, setMyCrush] = useState<CrushResponse | null>(null);
   const [myCrushId, setMyCrushId] = useState<string | null>(null);
   const [myCrushPhotoUrl, setMyCrushPhotoUrl] = useState<string | null>(null);
-  const [deckIndex, setDeckIndex] = useState(0);
+  // Filtros da Galeria
+  const [courseFilter, setCourseFilter] = useState<string>("ALL");
+  const [orientationFilter, setOrientationFilter] = useState<string>("ALL");
+  const [genderFilter, setGenderFilter] = useState<string>("ALL");
+  const [statusFilter, setStatusFilter] = useState<"ALL" | "MATCHES">("ALL");
+  const [rejectedCrushIds, setRejectedCrushIds] = useState<Set<string>>(new Set());
 
   const [token, setToken] = useState<string | null>(null);
   const [accountProfile, setAccountProfile] = useState<UserResponse | null>(null);
-  const [activeTab, setActiveTab] = useState<"gallery" | "received" | "accepted">("gallery");
   const [accessState, setAccessState] = useState<"loading" | "unauthenticated" | "no-crush" | "ready">("loading");
 
   const [isLoadingCrushes, setIsLoadingCrushes] = useState(true);
@@ -208,7 +227,7 @@ export default function CrushesPage() {
     }, 4500);
   }
 
-  // Only users with an authenticated crush profile can enter the gallery.
+  // Qualquer usuário autenticado pode ver a galeria — perfil próprio é opcional.
   useEffect(() => {
     let active = true;
 
@@ -231,10 +250,22 @@ export default function CrushesPage() {
           const savedEmail = localStorage.getItem("gossipuerj_email") ?? "";
           if (active && savedEmail) setAccountProfile({ email: savedEmail, username: savedEmail.split("@")[0] });
         }
-        const myCrush = await api.getMyCrush(savedToken);
-        setMyCrush(myCrush);
-        setMyCrushId(myCrush.id);
-        setMyCrushPhotoUrl(myCrush.photoUrl);
+
+        // Tenta carregar perfil próprio — OK se não existir ainda (404)
+        let resolvedMyCrushId = "";
+        try {
+          const myCrush = await api.getMyCrush(savedToken);
+          resolvedMyCrushId = myCrush.id;
+          setMyCrush(myCrush);
+          setMyCrushId(myCrush.id);
+          setMyCrushPhotoUrl(myCrush.photoUrl);
+        } catch (profileErr) {
+          if (!(profileErr instanceof ApiError && profileErr.status === 404)) {
+            throw profileErr;
+          }
+          // 404 = sem perfil ainda, continua normalmente
+        }
+
         const [crushesPage, rejectedMatchesPage] = await Promise.all([
           api.getAllCrushes(0, 60, undefined, savedToken),
           api.getRejectedMatches(savedToken),
@@ -242,10 +273,12 @@ export default function CrushesPage() {
 
         if (!active) return;
 
+        const rejectedIds = getMatchCrushIds(rejectedMatchesPage?.content ?? []);
+        setRejectedCrushIds(rejectedIds);
+
         const visibleCrushes = getVisibleCrushes(
           crushesPage?.content ?? [],
-          myCrush.id,
-          getMatchCrushIds(rejectedMatchesPage?.content ?? [])
+          resolvedMyCrushId
         );
 
         setCrushes(visibleCrushes);
@@ -255,10 +288,9 @@ export default function CrushesPage() {
           setCrushes([]);
           if (err instanceof ApiError && (err.status === 401 || err.status === 403)) {
             setAccessState("unauthenticated");
-          } else if (err instanceof ApiError && err.status === 404) {
-            setAccessState("no-crush");
           } else {
             setCrushError(getCrushErrorMessage(err, "Não conseguimos carregar os Crushes agora."));
+            setAccessState("ready"); // mostra galeria mesmo com erro parcial
           }
         }
       } finally {
@@ -286,10 +318,12 @@ export default function CrushesPage() {
         api.getAllCrushes(0, 60, undefined, token),
         api.getRejectedMatches(token),
       ]);
+      const rejectedIds = getMatchCrushIds(rejectedMatchesPage?.content ?? []);
+      setRejectedCrushIds(rejectedIds);
+
       const visibleCrushes = getVisibleCrushes(
         data?.content ?? [],
-        myCrushId ?? "",
-        getMatchCrushIds(rejectedMatchesPage?.content ?? [])
+        myCrushId ?? ""
       );
 
       setCrushes(visibleCrushes);
@@ -362,15 +396,25 @@ export default function CrushesPage() {
     setMatchingCrushId(crush.id);
     try {
       const match = await api.createMatch(token, crush.id);
-      setDeckIndex(0);
+      setRejectedCrushIds((prev) => {
+        const next = new Set(prev);
+        next.delete(crush.id);
+        return next;
+      });
 
       const currentUsername = accountProfile?.username ??
         (typeof window !== "undefined" ? localStorage.getItem("gossipuerj_email")?.split("@")[0] ?? null : null);
       const instagramUsername = getMatchInstagramUsername(match, currentUsername);
-      if (match.status === "ACCEPTED" && instagramUsername) {
-        showToast("Deu match! O Instagram foi liberado.", "💖");
+      if (match.status === "ACCEPTED") {
+        setReceivedMatches((prev) => [match, ...prev.filter((m) => m.id !== match.id)]);
+        if (instagramUsername) {
+          showToast(`Deu match! O Instagram @${instagramUsername} foi revelado!`, "💖");
+        } else {
+          showToast("Deu match! O Instagram foi liberado.", "💖");
+        }
       } else {
-        showToast("Interesse enviado! Se for recíproco, o Instagram será liberado.", "🎉");
+        setSentMatches((prev) => [match, ...prev.filter((m) => m.id !== match.id)]);
+        showToast("Interesse enviado! Se for recíproco, o match acontece.", "🎉");
       }
     } catch (err) {
       showToast(getCrushErrorMessage(err, "Não foi possível enviar o interesse."), "⚠️");
@@ -384,11 +428,11 @@ export default function CrushesPage() {
 
     try {
       await api.createMatch(token, crushId, "REJECTED");
-      setCrushes((prev) => prev.filter((crush) => crush.id !== crushId));
+      setRejectedCrushIds((prev) => new Set([...prev, crushId]));
+      showToast("Marcado como passado. Ele continua visível na galeria!", "✕");
     } catch (err) {
-      showToast(getCrushErrorMessage(err, "Não foi possível descartar este perfil."), "⚠️");
+      showToast(getCrushErrorMessage(err, "Não foi possível registrar a ação."), "⚠️");
     }
-    setDeckIndex(0);
   }
 
 
@@ -436,7 +480,6 @@ export default function CrushesPage() {
       setMyCrushPhotoUrl(savedCrush.photoUrl);
       const crushesPage = await api.getAllCrushes(0, 60, undefined, token);
       setCrushes(crushesPage?.content ?? []);
-      setDeckIndex(0);
       setAccessState("ready");
       const wasEditingCrush = isEditingCrush;
       resetModalForm();
@@ -480,29 +523,107 @@ export default function CrushesPage() {
     }
   }
 
-  const acceptedMatchCrushIds = new Set(
-    [...sentMatches, ...receivedMatches]
-      .filter((match) => match.status === "ACCEPTED")
-      .flatMap((match) => [match.crush?.id, match.likedCrush?.id])
-      .filter((crushId): crushId is string => Boolean(crushId))
-  );
+  function getCrushInteraction(crushId: string) {
+    const acceptedMatch = [...sentMatches, ...receivedMatches].find(
+      (m) =>
+        m.status === "ACCEPTED" &&
+        (m.crush?.id === crushId || m.likedCrush?.id === crushId)
+    );
+    if (acceptedMatch) {
+      const currentUsername =
+        accountProfile?.username ??
+        (typeof window !== "undefined"
+          ? localStorage.getItem("gossipuerj_email")?.split("@")[0] ?? null
+          : null);
+      const instagramUsername = getMatchInstagramUsername(acceptedMatch, currentUsername);
+      return { status: "ACCEPTED" as const, match: acceptedMatch, instagramUsername };
+    }
 
-  // Filtros aplicados
-  const deckCrushes = crushes.filter(
-    (crush) => crush.id !== myCrushId && !acceptedMatchCrushIds.has(crush.id)
-  );
-  const activeCrush = deckCrushes[deckIndex] ?? deckCrushes[0];
+    const pendingSent = sentMatches.find(
+      (m) => m.status === "PENDING" && (m.crush?.id === crushId || m.likedCrush?.id === crushId)
+    );
+    if (pendingSent) {
+      return { status: "PENDING_SENT" as const, match: pendingSent, instagramUsername: null };
+    }
 
-  const acceptedMatchesForMe = [...sentMatches, ...receivedMatches].filter((match) => {
-    if (match.status !== "ACCEPTED") return false;
-    const participantIds = [match.crush?.id, match.likedCrush?.id].filter((id): id is string => Boolean(id));
-    return participantIds.includes(myCrushId ?? "") || !myCrushId;
-  });
+    const pendingReceived = receivedMatches.find(
+      (m) => m.status === "PENDING" && (m.crush?.id === crushId || m.likedCrush?.id === crushId)
+    );
+    if (pendingReceived) {
+      return { status: "PENDING_RECEIVED" as const, match: pendingReceived, instagramUsername: null };
+    }
 
-  const acceptedReceivedMatches = acceptedMatchesForMe.filter((match) => {
-    const profileIds = [match.crush?.id, match.likedCrush?.id].filter((id): id is string => Boolean(id));
-    return profileIds.some((id) => id !== myCrushId);
-  });
+    if (rejectedCrushIds.has(crushId)) {
+      return { status: "REJECTED" as const, match: undefined, instagramUsername: null };
+    }
+
+    return { status: "NONE" as const, match: undefined, instagramUsername: null };
+  }
+
+  const acceptedMatchCrushIds = useMemo(() => {
+    return new Set(
+      [...sentMatches, ...receivedMatches]
+        .filter((match) => match.status === "ACCEPTED")
+        .flatMap((match) => [match.crush?.id, match.likedCrush?.id])
+        .filter((crushId): crushId is string => Boolean(crushId))
+    );
+  }, [sentMatches, receivedMatches]);
+
+  // Galeria completa com TODOS os crushes da UERJ!
+  const allGalleryCrushes = useMemo(() => {
+    return crushes.filter((crush) => crush.id !== myCrushId);
+  }, [crushes, myCrushId]);
+
+  // Contagem de estudantes por curso ativo na galeria
+  const availableCoursesWithCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    allGalleryCrushes.forEach((c) => {
+      if (c.courseName && c.courseName.trim()) {
+        const name = c.courseName.trim();
+        counts[name] = (counts[name] || 0) + 1;
+      }
+    });
+    return counts;
+  }, [allGalleryCrushes]);
+
+  const filteredDeckCrushes = useMemo(() => {
+    return allGalleryCrushes.filter((c) => {
+      const matchesCourse =
+        courseFilter === "ALL" ||
+        !courseFilter ||
+        Boolean(
+          c.courseName &&
+            (c.courseName.trim().toLowerCase() === courseFilter.trim().toLowerCase() ||
+             c.courseName.toLowerCase().includes(courseFilter.toLowerCase()))
+        );
+
+      const matchesGender =
+        genderFilter === "ALL" || c.gender === genderFilter;
+
+      const matchesOrientation =
+        orientationFilter === "ALL" || c.orientation === orientationFilter;
+
+      const matchesStatus =
+        statusFilter === "ALL" || (statusFilter === "MATCHES" && acceptedMatchCrushIds.has(c.id));
+
+      return matchesCourse && matchesGender && matchesOrientation && matchesStatus;
+    });
+  }, [allGalleryCrushes, courseFilter, genderFilter, orientationFilter, statusFilter, acceptedMatchCrushIds]);
+
+  const acceptedMatchesForMe = useMemo(() => {
+    return [...sentMatches, ...receivedMatches].filter((match) => {
+      if (match.status !== "ACCEPTED") return false;
+      const participantIds = [match.crush?.id, match.likedCrush?.id].filter((id): id is string => Boolean(id));
+      return participantIds.includes(myCrushId ?? "") || !myCrushId;
+    });
+  }, [sentMatches, receivedMatches, myCrushId]);
+
+  const acceptedReceivedMatches = useMemo(() => {
+    return acceptedMatchesForMe.filter((match) => {
+      const profileIds = [match.crush?.id, match.likedCrush?.id].filter((id): id is string => Boolean(id));
+      return profileIds.some((id) => id !== myCrushId);
+    });
+  }, [acceptedMatchesForMe, myCrushId]);
 
   if (accessState !== "ready") {
     const isUnauthenticated = accessState === "unauthenticated";
@@ -589,71 +710,9 @@ export default function CrushesPage() {
         </div>
       );
     }
-
-    return (
-      <div className="site-shell">
-        <SiteHeader active="crushes" authenticated={Boolean(token)} />
-        <main className="pink-page inner-page">
-          <div className="crush-access-card">
-            <div className="crush-access-icon">💘</div>
-            <h1>{accessState === "loading" ? "Abrindo a área de Crushes..." : "Crie seu perfil de Crush primeiro"}</h1>
-            <p>
-              {accessState === "loading"
-                ? "Só um instante..."
-                : "Para ver perfis e enviar curtidas, você precisa publicar seu próprio perfil de Crush."}
-            </p>
-            {accessState === "no-crush" ? (
-              <form className="crush-inline-form" onSubmit={handleCreateCrush}>
-                {modalError && <p className="form-error" role="alert">{modalError}</p>}
-                <label className="crush-file-field">
-                  Foto do perfil
-                  <input
-                    type="file"
-                    accept="image/*"
-                    disabled={isUploadingPhoto}
-                    onChange={(event) => {
-                      const file = event.target.files?.[0];
-                      if (file) void uploadToVercelBlob(file);
-                    }}
-                  />
-                </label>
-                <label>
-                  Uma descrição sobre você
-                  <textarea name="description" placeholder="Ex: Sempre no pilotis depois da aula..." required />
-                </label>
-                <div className="crush-inline-form-row">
-                  <label>
-                    Gênero
-                    <select name="gender" defaultValue="OTHER">
-                      <option value="FEMALE">Feminino</option>
-                      <option value="MALE">Masculino</option>
-                      <option value="TRANSGENDER">Transgênero</option>
-                      <option value="NON_BINARY">Não-binário</option>
-                      <option value="OTHER">Outro</option>
-                    </select>
-                  </label>
-                  <label>
-                    Orientação
-                    <select name="orientation" defaultValue="BISEXUAL">
-                      <option value="HETEROSEXUAL">Heterossexual</option>
-                      <option value="HOMOSEXUAL">Homossexual</option>
-                      <option value="BISEXUAL">Bissexual</option>
-                      <option value="ASEXUAL">Assexual</option>
-                      <option value="PANSEXUAL">Pansexual</option>
-                    </select>
-                  </label>
-                </div>
-                <button type="submit" className="create-crush-btn" disabled={isSubmittingCrush || isUploadingPhoto}>
-                  {isUploadingPhoto ? "ENVIANDO FOTO..." : isSubmittingCrush ? "PUBLICANDO..." : "PUBLICAR MEU PERFIL"}
-                </button>
-              </form>
-            ) : null}
-          </div>
-        </main>
-        <SiteFooter />
-      </div>
-    );
   }
+  // Todos os estados que não são "ready" ou "unauthenticated" exibem a tela completa
+  // O estado "loading" é tratado pelo isLoadingCrushes spinner dentro da galeria
 
   return (
     <div className="site-shell">
@@ -661,199 +720,348 @@ export default function CrushesPage() {
 
       <main className="pink-page inner-page">
         <div className="crushes-container">
-          <div className="crush-account-strip">
-            <div className="crush-account-tabs crushes-tabs" role="tablist">
-              <button
-                type="button"
-                role="tab"
-                aria-selected={activeTab === "gallery"}
-                className={`crush-tab-btn ${activeTab === "gallery" ? "active" : ""}`}
-                onClick={() => setActiveTab("gallery")}
-              >
-                <span>💘 Galeria de Crushes</span>
-              </button>
-
-              <button
-                type="button"
-                role="tab"
-                aria-selected={activeTab === "received"}
-                className={`crush-tab-btn tab-received ${activeTab === "received" ? "active" : ""}`}
-                onClick={() => setActiveTab("received")}
-              >
-                <span>💖 Matches</span>
-              </button>
+          {/* Hero Header Modernizado com Ação de Perfil */}
+          <div className="crush-hero-banner">
+            <div className="crush-hero-stamps">
+              <span className="stamp-tag">🏛️ PAVILHÃO JOÃO LYRA</span>
+              <span className="stamp-tag pink">🔒 INSTA APENAS NO MATCH</span>
+              <span className="stamp-tag cyan">✦ 100% UERJ</span>
             </div>
-            <div className="crush-account-actions">
-              <button type="button" className="crush-account-edit-btn" onClick={openEditCrushModal}>EDITAR PERFIL DO CRUSH</button>
-            </div>
-          </div>
-
-          {/* Título & Hero */}
-          <div style={{ textAlign: "center", marginBottom: "28px" }}>
-            <h1 style={{ color: "#fff", fontSize: "clamp(36px, 5vw, 64px)", letterSpacing: "-0.06em", margin: "0 0 10px", textShadow: "4px 4px 0 var(--ink)" }}>
-              Galeria de <span>Crushes</span>
+            <h1 className="crush-hero-title">
+              GALERIA DE <span>CRUSHES</span> DA UERJ
             </h1>
-            <span className="yellow-label centered-label" style={{ margin: "0 auto", fontSize: "11px", fontWeight: 900 }}>
-              CONECTE-SE COM OUTROS ESTUDANTES DA UERJ E ENCONTRE SEU MATCH
-            </span>
-          </div>
-
-          {/* ABA 1: GALERIA DE CRUSHES */}
-          {activeTab === "gallery" && (
-            <div className="crush-deck-area">
-              {isLoadingCrushes ? (
-                <div style={{ background: "#fff", border: "4px solid var(--ink)", padding: "40px", textAlign: "center" }}>
-                  <div className="loading-spinner" style={{ margin: "0 auto 16px" }} />
-                  <p style={{ fontWeight: 800, margin: 0 }}>Carregando os crushes da UERJ...</p>
-                </div>
-              ) : crushError ? (
-                <div style={{ background: "#fff", border: "4px solid var(--ink)", padding: "40px 24px", textAlign: "center", boxShadow: "4px 4px 0 var(--ink)" }}>
-                  <div style={{ fontSize: "40px", marginBottom: "12px" }}>⚠️</div>
-                  <h3 style={{ fontSize: "20px", fontWeight: 900, margin: "0 0 6px" }}>Erro ao carregar crushes</h3>
-                  <p style={{ color: "#666", fontSize: "14px", margin: "0 0 16px" }}>
-                    {crushError}
-                  </p>
-                  <button type="button" className="create-crush-btn" onClick={() => reloadCrushes()}>
-                    Tentar Novamente
-                  </button>
-                </div>
-              ) : activeCrush ? (
-                <div className="crush-deck">
-                      <div className="crush-card-modern tinder-card">
-                        <div className="crush-card-photo-wrap">
-                          {activeCrush.photoUrl ? (
-                            /* eslint-disable-next-line @next/next/no-img-element */
-                            <img
-                              src={getPrivatePhotoUrl(activeCrush.photoUrl)}
-                              alt={activeCrush.courseName ? `Crush de ${activeCrush.courseName}` : "Crush da UERJ"}
-                              className="crush-card-img"
-                              onError={(e) => {
-                                // Fallback visual limpo se imagem quebrar
-                                e.currentTarget.style.display = "none";
-                              }}
-                            />
-                          ) : (
-                            <div className="crush-card-avatar-fallback" style={{ background: "var(--yellow)" }}>
-                              {(activeCrush.courseName?.charAt(0) || "U").toUpperCase()}
-                            </div>
-                          )}
-                          {activeCrush.courseName && (
-                            <span className="crush-card-course-badge">
-                              {activeCrush.courseName}
-                            </span>
-                          )}
-                        </div>
-
-                        <div className="crush-card-body">
-                          <div className="crush-card-tags">
-                            {activeCrush.gender && (
-                              <span className="crush-tag gender">
-                                {genderLabels[activeCrush.gender] || activeCrush.gender}
-                              </span>
-                            )}
-                            {activeCrush.orientation && (
-                              <span className="crush-tag orientation">
-                                {orientationLabels[activeCrush.orientation] || activeCrush.orientation}
-                              </span>
-                            )}
-                          </div>
-
-                          <p className="crush-card-desc">
-                            &ldquo;{activeCrush.description}&rdquo;
-                          </p>
-
-                          <p className="crush-instagram-note">
-                            📸 O username exibido aqui é o @ do Instagram. Ele só fica disponível depois do match.
-                          </p>
-
-                          <div className="crush-deck-actions">
-                            <button type="button" className="crush-discard-btn" onClick={() => handleDiscardCrush(activeCrush.id)} aria-label="Descartar perfil">
-                              ✕ <span>DESCARTAR</span>
-                            </button>
-                            <button type="button" className="crush-like-btn" disabled={matchingCrushId === activeCrush.id} onClick={() => handleSendMatch(activeCrush)} aria-label="Curtir perfil">
-                              {matchingCrushId === activeCrush.id ? "..." : "♥"} <span>CURTIR</span>
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                </div>
+            <p className="crush-hero-subtitle">
+              Todos os estudantes reunidos na vitrine do campus. Descubra quem estuda perto de você, veja todos os perfis e desbloqueie o @ do Instagram quando rolar química recíproca!
+            </p>
+            <div className="crush-hero-actions-bar">
+              {myCrushId ? (
+                <button type="button" className="crush-hero-profile-btn" onClick={openEditCrushModal}>
+                  <span>✏️</span> <span>EDITAR MEU PERFIL DE CRUSH</span>
+                </button>
               ) : (
-                <div className="crush-empty-state">
-                  <div>✨</div>
-                  <h3>Você viu tudo por enquanto!</h3>
-                  <p>Novos perfis podem aparecer a qualquer momento. Volte depois para continuar a descobrir.</p>
-                </div>
+                <button type="button" className="crush-hero-profile-btn" onClick={openEditCrushModal}>
+                  <span>💘</span> <span>CADASTRAR MEU PERFIL DE CRUSH</span>
+                </button>
               )}
             </div>
-          )}
+          </div>
 
-          {/* ABA 2: MATCHES */}
-          {activeTab === "received" && (
-            <div className="matches-list">
-              {acceptedReceivedMatches.length > 0 ? (
-                <div className="received-matches-grid">
-                  {acceptedReceivedMatches.map((match) => {
-                    const matchedProfile = getMatchProfile(match, myCrushId);
-                    const instagramUsername = getMatchInstagramUsername(match, accountProfile?.username);
+          <div className="crush-gallery-section">
+            {/* Toolbar: Filtros da Galeria */}
+            <div className="crush-toolbar">
+              {/* Seletores de Curso e Sexualidade */}
+              <div className="crush-toolbar-bottom" style={{ borderTop: "none", paddingTop: 0 }}>
+                <div className="crush-select-wrap">
+                  <label htmlFor="crush-course-select" className="crush-select-label">
+                    🏛️ Curso:
+                  </label>
+                  <select
+                    id="crush-course-select"
+                    className={`crush-filter-select ${courseFilter !== "ALL" ? "active" : ""}`}
+                    value={courseFilter}
+                    onChange={(e) => setCourseFilter(e.target.value)}
+                    aria-label="Filtrar por curso"
+                  >
+                    <option value="ALL">✨ Todos os Cursos</option>
+                    {Object.keys(availableCoursesWithCounts).length > 0 && (
+                      <optgroup label="Cursos com Estudantes no Campus">
+                        {Object.entries(availableCoursesWithCounts)
+                          .sort((a, b) => a[0].localeCompare(b[0]))
+                          .map(([name, count]) => (
+                            <option key={`active-${name}`} value={name}>
+                              {name} ({count} {count === 1 ? "crush" : "crushes"})
+                            </option>
+                          ))}
+                      </optgroup>
+                    )}
+                    <optgroup label="Demais Cursos da UERJ">
+                      {ALL_UERJ_COURSES.filter((name) => !availableCoursesWithCounts[name]).map((name) => (
+                        <option key={`other-${name}`} value={name}>
+                          {name}
+                        </option>
+                      ))}
+                    </optgroup>
+                  </select>
+                </div>
 
-                    return (
-                      <article key={match.id} className="received-match-card">
-                        <div className="received-match-photo-wrap">
+                <div className="crush-select-wrap">
+                  <label htmlFor="crush-orientation-select" className="crush-select-label">
+                    🌈 Sexualidade:
+                  </label>
+                  <select
+                    id="crush-orientation-select"
+                    className={`crush-filter-select ${orientationFilter !== "ALL" ? "active" : ""}`}
+                    value={orientationFilter}
+                    onChange={(e) => setOrientationFilter(e.target.value)}
+                    aria-label="Filtrar por sexualidade"
+                  >
+                    <option value="ALL">🌈 Todas as Sexualidades</option>
+                    <option value="HETEROSEXUAL">👫 Heterossexual</option>
+                    <option value="HOMOSEXUAL">👬 Homossexual</option>
+                    <option value="BISEXUAL">🌈 Bissexual</option>
+                    <option value="PANSEXUAL">💖 Pansexual</option>
+                    <option value="ASEXUAL">💜 Assexual</option>
+                  </select>
+                </div>
+
+                {(courseFilter !== "ALL" || orientationFilter !== "ALL") && (
+                  <button
+                    type="button"
+                    className="crush-clear-all-btn"
+                    onClick={() => {
+                      setCourseFilter("ALL");
+                      setOrientationFilter("ALL");
+                    }}
+                    title="Limpar todos os filtros ativos"
+                  >
+                    <span>✕</span> <span>Limpar Filtros</span>
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {isLoadingCrushes ? (
+              <div className="crush-loading-card">
+                <div className="loading-spinner" style={{ margin: "0 auto 16px" }} />
+                <p style={{ fontWeight: 800, margin: 0 }}>Carregando a galeria de crushes da UERJ...</p>
+              </div>
+            ) : crushError ? (
+              <div className="crush-error-card">
+                <div style={{ fontSize: "40px", marginBottom: "12px" }}>⚠️</div>
+                <h3 style={{ fontSize: "20px", fontWeight: 900, margin: "0 0 6px" }}>Erro ao carregar crushes</h3>
+                <p style={{ color: "#666", fontSize: "14px", margin: "0 0 16px" }}>
+                  {crushError}
+                </p>
+                <button type="button" className="create-crush-btn" onClick={() => reloadCrushes()}>
+                  Tentar Novamente
+                </button>
+              </div>
+            ) : statusFilter === "MATCHES" && acceptedReceivedMatches.length === 0 ? (
+              <div className="crush-empty-state">
+                <div className="crush-empty-icon">💖</div>
+                <h3>Ainda sem matches confirmados</h3>
+                <p>
+                  Curta as pessoas que você achar interessantes na Galeria! Quando alguém curtir você de volta, o match confirmado e o Instagram liberado aparecem aqui.
+                </p>
+                <button
+                  type="button"
+                  className="create-crush-btn"
+                  onClick={() => setStatusFilter("ALL")}
+                >
+                  Ver Todos os Crushes da UERJ
+                </button>
+              </div>
+            ) : statusFilter === "MATCHES" && acceptedReceivedMatches.length > 0 ? (
+              /* MODO POLAROID MATCHES */
+              <div className="polaroid-matches-grid">
+                {acceptedReceivedMatches.map((match) => {
+                  const matchedProfile = getMatchProfile(match, myCrushId);
+                  const instagramUsername = getMatchInstagramUsername(match, accountProfile?.username);
+
+                  return (
+                    <article key={match.id} className="polaroid-match-card">
+                      <div className="polaroid-stamp">
+                        <span>💖 MATCH CONFIRMADO!</span>
+                      </div>
+
+                      <div className="polaroid-frame">
+                        <div className="polaroid-photo-wrap">
                           {matchedProfile?.photoUrl ? (
                             /* eslint-disable-next-line @next/next/no-img-element */
                             <img
                               src={getPrivatePhotoUrl(matchedProfile.photoUrl)}
-                              alt="Perfil revelado do match"
-                              className="received-match-photo"
+                              alt="Foto do crush com match"
+                              className="polaroid-img"
                             />
                           ) : (
-                            <div className="received-match-fallback">💘</div>
+                            <div className="polaroid-fallback">💘</div>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="polaroid-body">
+                        {matchedProfile?.courseName && (
+                          <span className="polaroid-course">
+                            🏛️ {matchedProfile.courseName}
+                          </span>
+                        )}
+
+                        <h3 className="polaroid-bio">
+                          &ldquo;{matchedProfile?.description || "Alguém curtiu você!"}&rdquo;
+                        </h3>
+
+                        <div className="crush-hero-tags-row" style={{ justifyContent: "center" }}>
+                          {matchedProfile?.gender && (
+                            <span className="crush-tag-pill gender">
+                              {genderIcons[matchedProfile.gender] || "👤"} {genderLabels[matchedProfile.gender] || matchedProfile.gender}
+                            </span>
+                          )}
+                          {matchedProfile?.orientation && (
+                            <span className="crush-tag-pill orientation">
+                              {orientationIcons[matchedProfile.orientation] || "🌈"} {orientationLabels[matchedProfile.orientation] || matchedProfile.orientation}
+                            </span>
                           )}
                         </div>
 
-                        <div className="received-match-body">
-                          <h3>{matchedProfile?.description || "Alguém curtiu você"}</h3>
-                          <div className="crush-card-tags">
-                            {matchedProfile?.gender && (
-                              <span className="crush-tag gender">
-                                {genderLabels[matchedProfile.gender] || matchedProfile.gender}
-                              </span>
-                            )}
-                            {matchedProfile?.orientation && (
-                              <span className="crush-tag orientation">
-                                {orientationLabels[matchedProfile.orientation] || matchedProfile.orientation}
-                              </span>
-                            )}
+                        {instagramUsername ? (
+                          <a
+                            href={`https://instagram.com/${encodeURIComponent(instagramUsername)}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="instagram-connect-btn"
+                          >
+                            <span className="insta-icon">📸</span>
+                            <span>Abrir @{instagramUsername} no Instagram ↗</span>
+                          </a>
+                        ) : (
+                          <div className="polaroid-pending-insta">
+                            <span>🔒 Instagram em processamento</span>
                           </div>
-                          {instagramUsername ? (
-                            <a href={`https://instagram.com/${encodeURIComponent(instagramUsername)}`} target="_blank" rel="noreferrer" className="received-match-instagram">
-                              @{instagramUsername} ↗
-                            </a>
-                          ) : (
-                            <p className="received-match-note">Instagram revelado após o match.</p>
+                        )}
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
+            ) : filteredDeckCrushes.length === 0 ? (
+              <div className="crush-empty-state">
+                <div className="crush-empty-icon">💘</div>
+                <h3>Nenhum crush encontrado por aqui!</h3>
+                <p>
+                  {courseFilter || genderFilter !== "ALL"
+                    ? "Tente ajustar ou limpar os filtros de busca para ver mais estudantes da UERJ."
+                    : "Ainda não há outros perfis cadastrados. Volte em breve!"}
+                </p>
+                {(courseFilter !== "ALL" || orientationFilter !== "ALL" || genderFilter !== "ALL" || statusFilter !== "ALL") && (
+                  <button
+                    type="button"
+                    className="create-crush-btn"
+                    onClick={() => {
+                      setCourseFilter("ALL");
+                      setOrientationFilter("ALL");
+                      setGenderFilter("ALL");
+                      setStatusFilter("ALL");
+                    }}
+                  >
+                    Limpar Filtros
+                  </button>
+                )}
+              </div>
+            ) : (
+              /* MODO VITRINE PADRÃO (GRID SHOWCASE) COM TODOS OS CRUSHES */
+              <div className="crush-grid-showcase">
+                {filteredDeckCrushes.map((crush) => {
+                  const interaction = getCrushInteraction(crush.id);
+                  return (
+                    <article key={crush.id} className="crush-grid-card">
+                      <div className="crush-grid-photo-wrap">
+                        {crush.photoUrl ? (
+                          /* eslint-disable-next-line @next/next/no-img-element */
+                          <img
+                            src={getPrivatePhotoUrl(crush.photoUrl)}
+                            alt={crush.courseName ? `Crush de ${crush.courseName}` : "Crush da UERJ"}
+                            className="crush-grid-photo"
+                            onError={(e) => {
+                              e.currentTarget.style.display = "none";
+                            }}
+                          />
+                        ) : (
+                          <div className="crush-grid-fallback">
+                            {(crush.courseName?.charAt(0) || "U").toUpperCase()}
+                          </div>
+                        )}
+
+                        {/* Status Chip no topo da foto */}
+                        {interaction.status === "ACCEPTED" && (
+                          <span className="crush-grid-status-badge accepted">
+                            💖 MATCH!
+                          </span>
+                        )}
+                        {interaction.status === "PENDING_SENT" && (
+                          <span className="crush-grid-status-badge pending">
+                            ⏳ ENVIADO
+                          </span>
+                        )}
+                        {interaction.status === "PENDING_RECEIVED" && (
+                          <span className="crush-grid-status-badge received">
+                            💘 CURTIU VOCÊ!
+                          </span>
+                        )}
+                        {interaction.status === "REJECTED" && (
+                          <span className="crush-grid-status-badge rejected">
+                            ✕ NÃO ROLOU
+                          </span>
+                        )}
+
+                        {crush.courseName && (
+                          <span className="crush-grid-course-badge">
+                            🏛️ {crush.courseName}
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="crush-grid-body">
+                        <div className="crush-grid-tags">
+                          {crush.gender && (
+                            <span className="crush-tag-pill mini gender">
+                              {genderIcons[crush.gender] || "👤"} {genderLabels[crush.gender] || crush.gender}
+                            </span>
+                          )}
+                          {crush.orientation && (
+                            <span className="crush-tag-pill mini orientation">
+                              {orientationIcons[crush.orientation] || "🌈"} {orientationLabels[crush.orientation] || crush.orientation}
+                            </span>
                           )}
                         </div>
-                      </article>
-                    );
-                  })}
-                </div>
-              ) : (
-                <div className="received-matches-teaser">
-                  <div className="received-matches-blur" aria-hidden="true">
-                    {receivedMatches.length > 0 ? receivedMatches.slice(0, 3).map((match) => (
-                      <div key={match.id} className="received-match-silhouette">💘 &nbsp; alguém curtiu seu perfil</div>
-                    )) : <div className="received-match-silhouette">💘 &nbsp; alguém pode estar te esperando</div>}
-                  </div>
-                  <div className="received-matches-overlay">
-                    <span>💖</span>
-                    <strong>Ainda não há matches</strong>
-                    <small>Quando houver, eles aparecerão aqui em destaque.</small>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
 
+                        <p className="crush-grid-bio">&ldquo;{crush.description}&rdquo;</p>
+
+                        {interaction.status === "ACCEPTED" && interaction.instagramUsername ? (
+                          <a
+                            href={`https://instagram.com/${encodeURIComponent(interaction.instagramUsername)}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="instagram-connect-btn mini"
+                          >
+                            <span className="insta-icon">📸</span>
+                            <span>@{interaction.instagramUsername} ↗</span>
+                          </a>
+                        ) : (
+                          <div className="crush-grid-actions">
+                            <button
+                              type="button"
+                              className="crush-grid-discard-btn"
+                              onClick={() => handleDiscardCrush(crush.id)}
+                              title="Passar perfil"
+                            >
+                              ✕ {interaction.status === "REJECTED" ? "Passado" : "Passar"}
+                            </button>
+                            <button
+                              type="button"
+                              className={`crush-grid-like-btn ${interaction.status === "PENDING_SENT" ? "pending" : ""}`}
+                              disabled={matchingCrushId === crush.id}
+                              onClick={() => handleSendMatch(crush)}
+                              title="Dar match"
+                            >
+                              {matchingCrushId === crush.id
+                                ? "⏳"
+                                : interaction.status === "PENDING_RECEIVED"
+                                ? "💘 MATCH DE VOLTA"
+                                : interaction.status === "PENDING_SENT"
+                                ? "⏳ ENVIADO"
+                                : interaction.status === "REJECTED"
+                                ? "💖 TENTAR NOVO"
+                                : "💖 MATCH"}
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </div>
       </main>
 

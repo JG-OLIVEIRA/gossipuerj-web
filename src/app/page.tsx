@@ -2,11 +2,11 @@
 
 import { ChangeEvent, FormEvent, useEffect, useState, useMemo } from "react";
 import Link from "next/link";
-import { api, ApiError, CommentResponse, CrushResponse, Post, PostCategory } from "../lib/api";
+import { api, ApiError, CommentResponse, Post, PostCategory } from "../lib/api";
 import PostCard from "./components/post-card";
 import SiteFooter from "./components/site-footer";
 import SiteHeader from "./components/site-header";
-import UerjBuildingSidebar, { findFloorForCourse, UERJ_BUILDING_FLOORS } from "./components/uerj-building-sidebar";
+import { findFloorForCourse, UERJ_BUILDING_FLOORS } from "./components/uerj-building-sidebar";
 
 const categories: { value: PostCategory; label: string; icon: string }[] = [
   { value: "CONFESSION", label: "Confissão", icon: "🤫" },
@@ -45,6 +45,8 @@ export default function FeedPage() {
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
   const [category, setCategory] = useState<PostCategory>("CONFESSION");
+  const [isCategoryPickerOpen, setIsCategoryPickerOpen] = useState(false);
+  const [isCreateFormOpen, setIsCreateFormOpen] = useState(false);
   const [photoUrl, setPhotoUrl] = useState("");
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
@@ -56,7 +58,7 @@ export default function FeedPage() {
   const [commentsByPost, setCommentsByPost] = useState<Record<string, CommentResponse[]>>({});
   const [postLikesMap, setPostLikesMap] = useState<Record<string, number>>({});
   const [currentPage, setCurrentPage] = useState(0);
-  const [hasMore, setHasMore] = useState(false);
+  const [totalPages, setTotalPages] = useState(1);
   const PAGE_SIZE = 20;
 
   // Filtros, Busca e Ordenação
@@ -73,8 +75,6 @@ export default function FeedPage() {
     username: string | null;
     vibe: string | null;
   }>({ token: null, email: null, username: null, vibe: null });
-  const [userCrushCourse, setUserCrushCourse] = useState<string | null>(null);
-  const [buildingCrushes, setBuildingCrushes] = useState<CrushResponse[]>([]);
 
   // Feedback Toast
   const [toast, setToast] = useState<{ message: string; icon: string } | null>(null);
@@ -109,42 +109,13 @@ export default function FeedPage() {
         return;
       }
 
-      if (token) {
-        try {
-          const myCrush = await api.getMyCrush(token);
-          if (active && myCrush?.courseName) {
-            setUserCrushCourse(myCrush.courseName);
-          } else {
-            const me = await api.me(token);
-            if (active && me?.courseName) setUserCrushCourse(me.courseName);
-          }
-        } catch {
-          try {
-            const me = await api.me(token);
-            if (active && me?.courseName) {
-              setUserCrushCourse(me.courseName);
-            } else if (active) {
-              setUserCrushCourse(null);
-            }
-          } catch {
-            if (active) setUserCrushCourse(null);
-          }
-        }
-        try {
-          const crushPage = await api.getAllCrushes(0, 100, undefined, token);
-          if (active) setBuildingCrushes(crushPage.content ?? []);
-        } catch {
-          if (active) setBuildingCrushes([]);
-        }
-      }
-
       try {
         const pageData = await api.getAll(0, PAGE_SIZE, undefined, token ?? undefined);
         if (!active) return;
         const loadedPosts = pageData.content;
         setPosts(loadedPosts);
         setCurrentPage(0);
-        setHasMore(!pageData.last);
+        setTotalPages(Math.max(1, pageData.totalPages ?? 1));
 
         const nextCommentsByPost: Record<string, CommentResponse[]> = {};
         if (token) {
@@ -204,17 +175,45 @@ export default function FeedPage() {
     };
   }, []);
 
-  async function loadMorePosts() {
-    if (isLoadingMore || !hasMore) return;
+  useEffect(() => {
+    if (!isCreateFormOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setIsCreateFormOpen(false);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isCreateFormOpen]);
+
+  async function loadPage(page: number) {
+    if (isLoadingMore || page === currentPage || page < 0 || page >= totalPages) return;
+    const token = localStorage.getItem("gossipuerj_token");
     setIsLoadingMore(true);
     try {
-      const nextPage = currentPage + 1;
-      const pageData = await api.getAll(nextPage, PAGE_SIZE, undefined, userSession.token ?? undefined);
-      setPosts((prev) => [...prev, ...pageData.content]);
-      setCurrentPage(nextPage);
-      setHasMore(!pageData.last);
+      const pageData = await api.getAll(page, PAGE_SIZE, undefined, token ?? undefined);
+      const loadedPosts = pageData.content ?? [];
+      const nextCommentsByPost: Record<string, CommentResponse[]> = {};
+
+      if (token) {
+        await Promise.all(
+          loadedPosts.map(async (post) => {
+            try {
+              const commentsPage = await api.getPostComments(token, post.id, 0, 20);
+              nextCommentsByPost[post.id] = commentsPage.content ?? [];
+            } catch {
+              nextCommentsByPost[post.id] = [];
+            }
+          })
+        );
+      }
+
+      setPosts(loadedPosts);
+      setCommentsByPost(nextCommentsByPost);
+      setCurrentPage(page);
+      setTotalPages(Math.max(1, pageData.totalPages ?? 1));
     } catch {
-      // falha silenciosa no load more
+      setError("Não foi possível carregar esta página de fofocas.");
     } finally {
       setIsLoadingMore(false);
     }
@@ -279,6 +278,7 @@ export default function FeedPage() {
       setCategory("CONFESSION");
       setPhotoUrl("");
       setPhotoPreview(null);
+      setIsCreateFormOpen(false);
       triggerToast("Fofoca publicada no campus com sucesso!", "📢");
     } catch (requestError) {
       const isMissingAuthenticatedUser =
@@ -547,270 +547,70 @@ export default function FeedPage() {
 
       <section className="pink-page feed-page" style={{ paddingTop: "32px", paddingBottom: "70px" }}>
         <div className="feed-hub">
-
           {/* ========================================================
-              HERO DO CAMPUS UERJ
+              BANNER HERO DO FEED (ESTILO NEO-BRUTALIST CRUSHES)
              ======================================================== */}
-          <div className="feed-hero-box">
-            <div className="feed-hero-banner">
-              <div className="feed-hero-title">
-                <h1>
-                  O QUE ESTÁ<br />
-                  ROLANDO NA <span>UERJ?</span>
-                </h1>
-                <p>FOFOCAS ANÔNIMAS, SEGREDOS E CRUSHES DO CAMPUS MARACANÃ</p>
-              </div>
-
-              <div className="cover-stamps">
-                <span className="stamp-tag">📍 PAVILHÃO JOÃO LYRA</span>
-                <span className="stamp-tag pink">✦ 100% ANÔNIMO</span>
-                <span className="stamp-tag cyan">EST. 2026</span>
-              </div>
+          <div className="crush-hero-banner feed-hero-banner">
+            <div className="crush-hero-stamps">
+              <span className="stamp-tag">🏛️ PAVILHÃO JOÃO LYRA</span>
+              <span className="stamp-tag pink">✦ 100% ANÔNIMO</span>
+              <span className="stamp-tag cyan">🔥 MARACANÃ &amp; CAMPUS</span>
             </div>
-
-            {/* Barra de Saudação do Usuário */}
-            <div className="feed-user-bar">
-              {userSession.token ? (
-                <div className="feed-user-greeting">
-                  <div className="feed-user-mini-avatar">
-                    {(userSession.username || "U").charAt(0).toUpperCase()}
-                  </div>
-                  <span>
-                    Conectado como <strong>@{userSession.username}</strong>
-                  </span>
-                  <span className="verified-chip" style={{ fontSize: "10px", padding: "2px 6px" }}>
-                    ✓ Discente UERJ
-                  </span>
-                </div>
-              ) : (
-                <div className="feed-user-greeting">
-                  <span>👀 Navegando em modo visitante.</span>
-                  <span style={{ color: "#666", fontSize: "12px" }}>
-                    Para votar e ter sua carteirinha, conecte-se.
-                  </span>
-                </div>
-              )}
-
-              <div>
-                {userSession.token ? (
-                  <Link
-                    href="/perfil"
-                    className="quick-action-btn"
-                    style={{ padding: "6px 12px", fontSize: "11px", display: "inline-flex", gap: "6px" }}
-                  >
-                    <span>🪪 Ver Minha Carteirinha</span>
-                    <span>→</span>
-                  </Link>
-                ) : (
-                  <Link
-                    href="/login"
-                    className="pink-button"
-                    style={{ padding: "8px 14px", fontSize: "11px", margin: 0, width: "auto", display: "inline-block" }}
-                  >
-                    ENTRAR / CRIAR CONTA
-                  </Link>
-                )}
-              </div>
+            <h1 className="crush-hero-title">
+              O QUE ESTÁ ROLANDO NA <span>UERJ?</span>
+            </h1>
+            <p className="crush-hero-subtitle">
+              Fofocas anônimas, segredos, babados e crushes do campus Maracanã. Descubra o que está rolando pelos pavilhões e compartilhe seus relatos com total sigilo!
+            </p>
+            <div className="crush-hero-actions-bar">
+              <button
+                type="button"
+                className="crush-hero-profile-btn"
+                onClick={() => setIsCreateFormOpen(true)}
+              >
+                <span>✏️</span> <span>SOLTAR FOFOCA NO CAMPUS</span>
+              </button>
             </div>
           </div>
 
           {/* ========================================================
-              CAIXA DE CONFISSÃO ANÔNIMA (SECRET DROP BOX)
-             ======================================================== */}
-          <form className="feed-create-card" onSubmit={handleSubmit}>
-            <div className="feed-create-header">
-              <div className="feed-create-title">
-                <span>🤫</span>
-                <span>Soltar Fofoca no Campus</span>
-              </div>
-              <div className="anonymous-badge">
-                <span>🔒</span>
-                <span>Garantia de Anonimato: Seu nome nunca aparece no post</span>
-              </div>
-            </div>
-
-            {/* Seletor de Categoria em Chips */}
-            <div style={{ marginBottom: "8px", fontSize: "11px", fontWeight: 800, textTransform: "uppercase", color: "#666" }}>
-              Escolha a Categoria:
-            </div>
-            <div className="category-chips-row">
-              {categories.map((item) => (
-                <button
-                  key={item.value}
-                  type="button"
-                  className={`category-chip-btn ${category === item.value ? "active" : ""}`}
-                  onClick={() => setCategory(item.value)}
-                >
-                  <span>{item.icon}</span>
-                  <span>{item.label}</span>
-                </button>
-              ))}
-            </div>
-
-            <input
-              className="post-title-input"
-              value={title}
-              onChange={(event) => setTitle(event.target.value)}
-              maxLength={250}
-              placeholder="Dê um título chamativo para a fofoca (ex: 'O que aconteceu hoje na rampa do 3º andar...')"
-              aria-label="Título da publicação"
-              required
-            />
-
-            <textarea
-              className="post-content-textarea"
-              value={content}
-              onChange={(event) => setContent(event.target.value)}
-              maxLength={280}
-              placeholder="Conta o babado completo! Lembra de não inventar fake news absurda e respeitar os colegas..."
-              aria-label="Conteúdo da publicação"
-              required
-            />
-
-            {photoPreview && (
-              <div style={{ marginTop: "12px", marginBottom: "8px", position: "relative" }}>
-                <img
-                  src={photoPreview}
-                  alt="Pré-visualização da fofoca"
-                  style={{
-                    width: "100%",
-                    maxHeight: "260px",
-                    objectFit: "cover",
-                    borderRadius: "16px",
-                    border: "1px solid rgba(186, 70, 115, 0.18)",
-                    display: "block",
-                  }}
-                />
-                <button
-                  type="button"
-                  onClick={() => {
-                    setPhotoUrl("");
-                    setPhotoPreview(null);
-                  }}
-                  style={{
-                    position: "absolute",
-                    top: "10px",
-                    right: "10px",
-                    border: "none",
-                    borderRadius: "999px",
-                    padding: "6px 10px",
-                    background: "rgba(17, 17, 17, 0.72)",
-                    color: "#fff",
-                    cursor: "pointer",
-                    fontWeight: 700,
-                  }}
-                >
-                  Remover
-                </button>
-              </div>
-            )}
-
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", marginTop: "8px" }}>
-              <label
-                className="gray-button"
-                style={{
-                  margin: 0,
-                  width: "auto",
-                  display: "inline-flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  cursor: "pointer",
-                  opacity: isUploadingPhoto ? 0.7 : 1,
-                }}
-              >
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={handlePhotoUpload}
-                  disabled={isUploadingPhoto}
-                  style={{ display: "none" }}
-                />
-                {isUploadingPhoto ? "ENVIANDO..." : "📷 ADICIONAR IMAGEM"}
-              </label>
-              {photoUrl ? (
-                <span style={{ fontSize: "11px", color: "#666", fontWeight: 700 }}>
-                  Imagem anexada
-                </span>
-              ) : (
-                <span style={{ fontSize: "11px", color: "#888" }}>Sem imagem</span>
-              )}
-            </div>
-
-            <div className="feed-create-footer">
-              <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                <span className={`char-counter-pill ${content.length >= 260 ? "warning" : ""}`}>
-                  {content.length}/280 caracteres
-                </span>
-                <span style={{ fontSize: "11px", color: "#777" }}>
-                  Categoria: <strong>{categoryLabels[category]}</strong>
-                </span>
-              </div>
-
-              <button className="pink-button" type="submit" disabled={isSubmitting} style={{ margin: 0, width: "auto" }}>
-                {isSubmitting ? "PUBLICANDO..." : "PUBLICAR FOFOCA ↗"}
-              </button>
-            </div>
-
-            {error && <p className="form-error" role="alert" style={{ marginTop: "14px" }}>{error}</p>}
-          </form>
-
-          {/* ========================================================
-              BARRA DE BUSCA, FILTROS E ORDENAÇÃO
+              BARRA DE BUSCA E FILTROS DE CATEGORIA
              ======================================================== */}
           <div className="feed-filter-card">
-            <div className="feed-filter-top-row">
-              <div className="feed-search-wrap">
-                <input
-                  type="text"
-                  className="feed-search-bar"
-                  placeholder="⌕ Pesquisar por fofoca, curso, apelido, professor, andar..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  aria-label="Pesquisar fofocas no feed"
-                />
-              </div>
-
-              <div className="feed-sort-actions">
-                <button
-                  type="button"
-                  className={`sort-toggle-btn ${sortBy === "recent" ? "active" : ""}`}
-                  onClick={() => setSortBy("recent")}
-                  title="Ordenar por publicações mais recentes"
-                >
-                  <span>⚡</span>
-                  <span>Mais Recentes</span>
-                </button>
-                <button
-                  type="button"
-                  className={`sort-toggle-btn ${sortBy === "likes" ? "active" : ""}`}
-                  onClick={() => setSortBy("likes")}
-                  title="Ordenar por publicações com mais curtidas"
-                >
-                  <span>🔥</span>
-                  <span>Em Alta</span>
-                </button>
-              </div>
+            <div className="feed-search-wrap">
+              <input
+                type="text"
+                className="feed-search-bar"
+                placeholder="⌕ Pesquisar por fofoca, curso, apelido, professor, andar..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                aria-label="Pesquisar fofocas no feed"
+              />
             </div>
 
-            {/* Seletor de Categoria com Contadores */}
-            <div className="feed-category-pills-row">
-              <label className="feed-category-select-label" htmlFor="feed-category-filter">
-                Categoria
-              </label>
-              <select
-                id="feed-category-filter"
-                className="feed-category-select"
-                value={selectedCategory}
-                onChange={(event) => setSelectedCategory(event.target.value)}
-                aria-label="Filtrar fofocas por categoria"
+            {/* Categorias Listadas como Botões */}
+            <div className="feed-category-chips-list" role="tablist" aria-label="Filtrar fofocas por categoria">
+              <button
+                type="button"
+                role="tab"
+                aria-selected={selectedCategory === "ALL"}
+                className={`feed-category-btn ${selectedCategory === "ALL" ? "active" : ""}`}
+                onClick={() => setSelectedCategory("ALL")}
               >
-                <option value="ALL">✨ Todos ({posts.length})</option>
-                {categories.map((c) => (
-                  <option key={c.value} value={c.value}>
-                    {c.icon} {c.label} ({categoryCounts[c.value] || 0})
-                  </option>
-                ))}
-              </select>
+                <span>✨ Todos ({posts.length})</span>
+              </button>
+              {categories.map((c) => (
+                <button
+                  key={c.value}
+                  type="button"
+                  role="tab"
+                  aria-selected={selectedCategory === c.value}
+                  className={`feed-category-btn ${selectedCategory === c.value ? "active" : ""}`}
+                  onClick={() => setSelectedCategory(c.value)}
+                >
+                  <span>{c.icon} {c.label} ({categoryCounts[c.value] || 0})</span>
+                </button>
+              ))}
             </div>
           </div>
 
@@ -897,108 +697,231 @@ export default function FeedPage() {
                   />
                 ))
               )}
+
+              {totalPages > 1 && !isLoading && (
+                <nav className="feed-pagination" aria-label="Paginação das fofocas">
+                  <button
+                    type="button"
+                    className="feed-page-btn"
+                    onClick={() => void loadPage(currentPage - 1)}
+                    disabled={isLoadingMore || currentPage === 0}
+                    aria-label="Página anterior"
+                  >
+                    ←
+                  </button>
+                  {Array.from({ length: totalPages }, (_, page) => (
+                    <button
+                      key={page}
+                      type="button"
+                      className={`feed-page-btn ${currentPage === page ? "active" : ""}`}
+                      onClick={() => void loadPage(page)}
+                      disabled={isLoadingMore}
+                      aria-current={currentPage === page ? "page" : undefined}
+                    >
+                      {page + 1}
+                    </button>
+                  ))}
+                  <button
+                    type="button"
+                    className="feed-page-btn"
+                    onClick={() => void loadPage(currentPage + 1)}
+                    disabled={isLoadingMore || currentPage >= totalPages - 1}
+                    aria-label="Próxima página"
+                  >
+                    →
+                  </button>
+                </nav>
+              )}
             </main>
-
-            {/* Botão Carregar Mais Fofocas */}
-            {hasMore && !isLoading && (
-              <div style={{ textAlign: "center", padding: "24px 0 8px" }}>
-                <button
-                  type="button"
-                  className="pink-button"
-                  onClick={loadMorePosts}
-                  disabled={isLoadingMore}
-                  style={{ margin: 0, width: "auto", minWidth: "220px", fontSize: "13px" }}
-                >
-                  {isLoadingMore ? (
-                    <span style={{ display: "inline-flex", alignItems: "center", gap: "8px" }}>
-                      <span className="loading-spinner" style={{ width: "14px", height: "14px", borderWidth: "2px" }} />
-                      Carregando...
-                    </span>
-                  ) : (
-                    "📜 Carregar mais fofocas"
-                  )}
-                </button>
-              </div>
-            )}
-
-            {/* Coluna Lateral: Radar do Campus UERJ */}
-            <aside className="campus-sidebar">
-
-              <UerjBuildingSidebar
-                userCourse={userCrushCourse}
-                posts={posts}
-                crushes={buildingCrushes}
-                selectedFloor={selectedFloor}
-                onSelectFloor={(floor) => {
-                  setSelectedFloor(floor);
-                  if (floor) {
-                    setSelectedCourseFilter(null);
-                    triggerToast(`Feed filtrado no ${floor}º andar`, "🏛️");
-                  }
-                }}
-                selectedCourse={selectedCourseFilter}
-                onSelectCourse={(course) => {
-                  setSelectedCourseFilter(course);
-                  if (course) {
-                    setSelectedFloor(null);
-                    triggerToast(`Feed filtrado por ${course}`, "🎓");
-                  }
-                }}
-              />
-
-
-              {/* CARD 2: Estatuto do Fofoqueiro UERJ */}
-              <div className="sidebar-card">
-                <div className="sidebar-card-title">
-                  <strong>📜 ESTATUTO DO CAMPUS</strong>
-                  <span>REGRAS</span>
-                </div>
-                <div className="rules-list">
-                  <div className="rule-point">
-                    <strong>1. 100% Anônimo:</strong> O sigilo da sua identidade é sagrado.
-                  </div>
-                  <div className="rule-point">
-                    <strong>2. Respeito Mútuo:</strong> Fofoca universitária saudável, sem ofensas gratuitas.
-                  </div>
-                  <div className="rule-point">
-                    <strong>3. Verdade no Bandejão:</strong> Se o suco for de caju, avise a galera com antecedência.
-                  </div>
-                </div>
-              </div>
-
-              {/* CARD 3: Atalhos Rápidos */}
-              <div className="sidebar-card">
-                <div className="sidebar-card-title">
-                  <strong>🚀 ATALHOS RÁPIDOS</strong>
-                  <span>HUB</span>
-                </div>
-                <Link className="sidebar-shortcut-btn" href="/crushes">
-                  <span>💘 Galeria de Crushes</span>
-                  <span>→</span>
-                </Link>
-                <Link className="sidebar-shortcut-btn" href="/vendas">
-                  <span>🛍️ Desapegos & Vendas</span>
-                  <span>→</span>
-                </Link>
-                <Link className="sidebar-shortcut-btn" href="/eventos">
-                  <span>📅 Calendário de Festas</span>
-                  <span>→</span>
-                </Link>
-                <Link className="sidebar-shortcut-btn" href="/grupos">
-                  <span>👥 Grupos de WhatsApp</span>
-                  <span>→</span>
-                </Link>
-                <Link className="sidebar-shortcut-btn" href="/como-usar">
-                  <span>📖 Como usar o site</span>
-                  <span>→</span>
-                </Link>
-              </div>
-
-            </aside>
           </div>
 
         </div>
       </section>
+
+      {/* Menu Suspenso (+) / Modal para Soltar Fofoca */}
+      {isCreateFormOpen && (
+        <div
+          className="feed-modal-overlay"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setIsCreateFormOpen(false);
+          }}
+        >
+          <div className="feed-modal-content" role="dialog" aria-modal="true" aria-labelledby="fofoca-modal-title">
+            <div className="feed-modal-header">
+              <div className="feed-modal-title-wrap">
+                <span className="feed-modal-badge-icon">🤫</span>
+                <div>
+                  <h2 id="fofoca-modal-title" className="feed-modal-heading">Soltar Fofoca no Campus</h2>
+                  <p className="feed-modal-sub">100% Anônimo • Conte o que rolou na UERJ</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                className="feed-modal-close-btn"
+                onClick={() => setIsCreateFormOpen(false)}
+                aria-label="Fechar"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleSubmit} className="feed-modal-form">
+              <div className="anonymous-badge" style={{ marginBottom: "14px" }}>
+                <span>🔒</span>
+                <span>Garantia de Anonimato: Seu nome nunca aparece no post</span>
+              </div>
+
+              <div className="category-picker">
+                <button
+                  type="button"
+                  className="category-picker-toggle"
+                  onClick={() => setIsCategoryPickerOpen((isOpen) => !isOpen)}
+                  aria-expanded={isCategoryPickerOpen}
+                  aria-controls="post-category-options"
+                >
+                  <span>Categoria: <strong>{categoryIcons[category]} {categoryLabels[category]}</strong></span>
+                  <span aria-hidden="true">{isCategoryPickerOpen ? "▲" : "▼"}</span>
+                </button>
+                {isCategoryPickerOpen && (
+                  <div id="post-category-options" className="category-chips-row">
+                    {categories.map((item) => (
+                      <button
+                        key={item.value}
+                        type="button"
+                        className={`category-chip-btn ${category === item.value ? "active" : ""}`}
+                        onClick={() => {
+                          setCategory(item.value);
+                          setIsCategoryPickerOpen(false);
+                        }}
+                      >
+                        <span>{item.icon}</span>
+                        <span>{item.label}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <input
+                className="post-title-input"
+                value={title}
+                onChange={(event) => setTitle(event.target.value)}
+                maxLength={250}
+                placeholder="Dê um título chamativo para a fofoca (ex: 'O que aconteceu hoje na rampa do 3º andar...')"
+                aria-label="Título da publicação"
+                required
+              />
+
+              <textarea
+                className="post-content-textarea"
+                value={content}
+                onChange={(event) => setContent(event.target.value)}
+                maxLength={280}
+                placeholder="Conta o babado completo! Lembra de não inventar fake news absurda e respeitar os colegas..."
+                aria-label="Conteúdo da publicação"
+                required
+              />
+
+              {photoPreview && (
+                <div style={{ marginTop: "12px", marginBottom: "8px", position: "relative" }}>
+                  <img
+                    src={photoPreview}
+                    alt="Pré-visualização da fofoca"
+                    style={{
+                      width: "100%",
+                      maxHeight: "260px",
+                      objectFit: "cover",
+                      borderRadius: "16px",
+                      border: "1px solid rgba(186, 70, 115, 0.18)",
+                      display: "block",
+                    }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPhotoUrl("");
+                      setPhotoPreview(null);
+                    }}
+                    style={{
+                      position: "absolute",
+                      top: "10px",
+                      right: "10px",
+                      border: "none",
+                      borderRadius: "999px",
+                      padding: "6px 10px",
+                      background: "rgba(17, 17, 17, 0.72)",
+                      color: "#fff",
+                      cursor: "pointer",
+                      fontWeight: 700,
+                    }}
+                  >
+                    Remover
+                  </button>
+                </div>
+              )}
+
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", marginTop: "8px" }}>
+                <label
+                  className="gray-button"
+                  style={{
+                    margin: 0,
+                    width: "auto",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    cursor: "pointer",
+                    opacity: isUploadingPhoto ? 0.7 : 1,
+                  }}
+                >
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handlePhotoUpload}
+                    disabled={isUploadingPhoto}
+                    style={{ display: "none" }}
+                  />
+                  {isUploadingPhoto ? "ENVIANDO..." : "📷 ADICIONAR IMAGEM"}
+                </label>
+                {photoUrl ? (
+                  <span style={{ fontSize: "11px", color: "#666", fontWeight: 700 }}>
+                    Imagem anexada
+                  </span>
+                ) : (
+                  <span style={{ fontSize: "11px", color: "#888" }}>Sem imagem</span>
+                )}
+              </div>
+
+              <div className="feed-create-footer">
+                <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                  <span className={`char-counter-pill ${content.length >= 260 ? "warning" : ""}`}>
+                    {content.length}/280 caracteres
+                  </span>
+                  <span style={{ fontSize: "11px", color: "#777" }}>
+                    Categoria: <strong>{categoryLabels[category]}</strong>
+                  </span>
+                </div>
+
+                <button className="pink-button" type="submit" disabled={isSubmitting} style={{ margin: 0, width: "auto" }}>
+                  {isSubmitting ? "PUBLICANDO..." : "PUBLICAR FOFOCA ↗"}
+                </button>
+              </div>
+
+              {error && <p className="form-error" role="alert" style={{ marginTop: "14px" }}>{error}</p>}
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Botão Suspenso / Flutuante (+) para Soltar Fofoca */}
+      <button
+        type="button"
+        className="feed-fab-create-btn"
+        onClick={() => setIsCreateFormOpen(true)}
+        aria-label="Soltar fofoca (+)"
+        title="Soltar nova fofoca (+)"
+      >
+        <span>＋</span>
+      </button>
 
       {/* Floating Toast Notification */}
       {toast && (
