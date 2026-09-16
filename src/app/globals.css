@@ -830,21 +830,21 @@
   background: linear-gradient(135deg, #f00083 0%, #ff4b72 45%, #f7ff00 100%);
   background-image: radial-gradient(rgba(0,0,0,0.14) 2px, transparent 2px), linear-gradient(135deg, #f00083 0%, #ff4b72 45%, #f7ff00 100%);
   background-size: 16px 16px, 100% 100%;
-  padding: 32px 30px;
+  padding: 20px 24px;
   border-bottom: 4px solid var(--ink);
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  gap: 20px;
+  gap: 12px;
   flex-wrap: wrap;
 }
 .feed-hero-title h1 {
   color: #fff;
-  font-size: clamp(34px, 5.5vw, 62px);
+  font-size: clamp(30px, 4.5vw, 48px);
   letter-spacing: -0.06em;
   line-height: 0.92;
-  margin: 0 0 12px;
-  text-shadow: 4px 4px 0 var(--ink);
+  margin: 0 0 8px;
+  text-shadow: 3px 3px 0 var(--ink);
 }
 .feed-hero-title h1 span { color: var(--yellow); }
 .feed-hero-title p {
@@ -852,9 +852,9 @@
   border: 3px solid var(--ink);
   box-shadow: 4px 4px 0 var(--ink);
   display: inline-block;
-  font-size: 12px;
+  font-size: 10px;
   font-weight: 800;
-  padding: 6px 12px;
+  padding: 5px 10px;
   margin: 0;
   text-transform: uppercase;
 }
@@ -905,6 +905,36 @@
   box-shadow: 8px 8px 0 var(--ink);
   padding: 24px;
 }
+.feed-create-toggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 0;
+  color: var(--ink);
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+}
+.feed-create-toggle:hover,
+.feed-create-toggle:focus-visible {
+  color: var(--pink);
+  outline: none;
+}
+.feed-create-toggle-icon {
+  min-width: 28px;
+  font-size: 22px;
+  line-height: 1;
+  text-align: center;
+}
+.feed-create-card:not(.is-open) {
+  padding-top: 16px;
+  padding-bottom: 16px;
+}
+.feed-create-card:not(.is-open) .feed-create-title {
+  font-size: 15px;
+}
 .feed-create-header {
   display: flex;
   justify-content: space-between;
@@ -935,11 +965,39 @@
   align-items: center;
   gap: 5px;
 }
+.category-picker {
+  margin-bottom: 14px;
+}
+.category-picker-toggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 12px;
+  background: var(--paper);
+  border: 2px solid var(--ink);
+  box-shadow: 3px 3px 0 var(--ink);
+  color: var(--ink);
+  font-size: 11px;
+  font-weight: 800;
+  text-align: left;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+.category-picker-toggle:hover,
+.category-picker-toggle:focus-visible {
+  background: var(--yellow);
+  outline: none;
+}
+.category-picker-toggle strong {
+  font-weight: 900;
+}
 .category-chips-row {
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
-  margin-bottom: 14px;
+  margin-top: 10px;
 }
 .category-chip-btn {
   background: var(--paper);
@@ -1009,16 +1067,16 @@
   background: var(--paper);
   border: 4px solid var(--ink);
   box-shadow: 6px 6px 0 var(--ink);
-  padding: 18px 20px;
+  padding: 12px 16px;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 10px;
 }
 .feed-filter-top-row {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 14px;
+  gap: 10px;
   flex-wrap: wrap;
 }
 .feed-search-wrap {
@@ -1030,22 +1088,22 @@
   background: #fff;
   border: 3px solid var(--ink);
   box-shadow: 3px 3px 0 var(--ink);
-  padding: 11px 16px;
-  font-size: 13px;
+  padding: 9px 13px;
+  font-size: 12px;
   font-weight: 600;
   width: 100%;
   outline: none;
 }
 .feed-sort-actions {
   display: flex;
-  gap: 8px;
+  gap: 6px;
 }
 .sort-toggle-btn {
   background: #fff;
   border: 3px solid var(--ink);
   box-shadow: 3px 3px 0 var(--ink);
-  padding: 9px 14px;
-  font-size: 12px;
+  padding: 8px 11px;
+  font-size: 11px;
   font-weight: 800;
   cursor: pointer;
   display: inline-flex;
@@ -1062,13 +1120,45 @@
 
 .feed-category-pills-row {
   display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin-top: 16px;
-  max-width: 420px;
+  align-items: center;
+  gap: 10px;
+  margin-top: 0;
+  max-width: 360px;
 }
 .feed-category-select-label { font-size: 11px; font-weight: 800; text-transform: uppercase; }
-.feed-category-select { background:#fff; border:3px solid var(--ink); box-shadow:3px 3px 0 var(--ink); cursor:pointer; font-size:13px; font-weight:700; min-height:46px; padding:10px 12px; width:100%; }
+.feed-category-select { background:#fff; border:3px solid var(--ink); box-shadow:3px 3px 0 var(--ink); cursor:pointer; font-size:12px; font-weight:700; min-height:38px; padding:7px 10px; width:240px; }
+.feed-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 18px 0 8px;
+}
+.feed-page-btn {
+  min-width: 34px;
+  height: 34px;
+  padding: 5px 9px;
+  border: 2px solid var(--ink);
+  box-shadow: 2px 2px 0 var(--ink);
+  background: #fff;
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+.feed-page-btn:hover:not(:disabled) {
+  background: var(--yellow);
+  transform: translateY(-1px);
+}
+.feed-page-btn.active {
+  background: var(--ink);
+  color: #fff;
+  box-shadow: 2px 2px 0 var(--pink);
+}
+.feed-page-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
 .filter-pill {
   background: #fff;
   border: 2px solid var(--ink);
@@ -3542,12 +3632,12 @@ article.post-card {
   .profile-hero-body { flex-direction: column; align-items: center; text-align: center; }
   .profile-handle-bar { justify-content: center; }
   .profile-vibe-box { align-items: center; width: 100%; margin-top: 10px; }
-  .feed-hero-banner { padding: 22px 18px; }
+  .feed-hero-banner { padding: 16px 14px; gap: 10px; }
   .feed-filter-top-row { flex-direction: column; align-items: stretch; }
   .feed-sort-actions { justify-content: stretch; }
   .sort-toggle-btn { flex: 1; justify-content: center; }
-  .feed-category-pills-row { display:flex; max-width:none; }
-  .feed-category-select { min-height:48px; }
+  .feed-category-pills-row { align-items:stretch; flex-direction:column; gap:6px; max-width:none; }
+  .feed-category-select { min-height:42px; width:100%; }
   .selects { grid-template-columns:1fr; }
   .calendar-panel { padding:12px; }
   .calendar-grid,.weekdays { gap:6px; }

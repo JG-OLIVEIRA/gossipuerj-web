@@ -45,6 +45,8 @@ export default function FeedPage() {
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
   const [category, setCategory] = useState<PostCategory>("CONFESSION");
+  const [isCategoryPickerOpen, setIsCategoryPickerOpen] = useState(false);
+  const [isCreateFormOpen, setIsCreateFormOpen] = useState(false);
   const [photoUrl, setPhotoUrl] = useState("");
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
@@ -56,7 +58,7 @@ export default function FeedPage() {
   const [commentsByPost, setCommentsByPost] = useState<Record<string, CommentResponse[]>>({});
   const [postLikesMap, setPostLikesMap] = useState<Record<string, number>>({});
   const [currentPage, setCurrentPage] = useState(0);
-  const [hasMore, setHasMore] = useState(false);
+  const [totalPages, setTotalPages] = useState(1);
   const PAGE_SIZE = 20;
 
   // Filtros, Busca e Ordenação
@@ -144,7 +146,7 @@ export default function FeedPage() {
         const loadedPosts = pageData.content;
         setPosts(loadedPosts);
         setCurrentPage(0);
-        setHasMore(!pageData.last);
+        setTotalPages(Math.max(1, pageData.totalPages ?? 1));
 
         const nextCommentsByPost: Record<string, CommentResponse[]> = {};
         if (token) {
@@ -204,17 +206,34 @@ export default function FeedPage() {
     };
   }, []);
 
-  async function loadMorePosts() {
-    if (isLoadingMore || !hasMore) return;
+  async function loadPage(page: number) {
+    if (isLoadingMore || page === currentPage || page < 0 || page >= totalPages) return;
+    const token = localStorage.getItem("gossipuerj_token");
     setIsLoadingMore(true);
     try {
-      const nextPage = currentPage + 1;
-      const pageData = await api.getAll(nextPage, PAGE_SIZE, undefined, userSession.token ?? undefined);
-      setPosts((prev) => [...prev, ...pageData.content]);
-      setCurrentPage(nextPage);
-      setHasMore(!pageData.last);
+      const pageData = await api.getAll(page, PAGE_SIZE, undefined, token ?? undefined);
+      const loadedPosts = pageData.content ?? [];
+      const nextCommentsByPost: Record<string, CommentResponse[]> = {};
+
+      if (token) {
+        await Promise.all(
+          loadedPosts.map(async (post) => {
+            try {
+              const commentsPage = await api.getPostComments(token, post.id, 0, 20);
+              nextCommentsByPost[post.id] = commentsPage.content ?? [];
+            } catch {
+              nextCommentsByPost[post.id] = [];
+            }
+          })
+        );
+      }
+
+      setPosts(loadedPosts);
+      setCommentsByPost(nextCommentsByPost);
+      setCurrentPage(page);
+      setTotalPages(Math.max(1, pageData.totalPages ?? 1));
     } catch {
-      // falha silenciosa no load more
+      setError("Não foi possível carregar esta página de fofocas.");
     } finally {
       setIsLoadingMore(false);
     }
@@ -617,34 +636,58 @@ export default function FeedPage() {
           {/* ========================================================
               CAIXA DE CONFISSÃO ANÔNIMA (SECRET DROP BOX)
              ======================================================== */}
-          <form className="feed-create-card" onSubmit={handleSubmit}>
-            <div className="feed-create-header">
-              <div className="feed-create-title">
+          <form className={`feed-create-card ${isCreateFormOpen ? "is-open" : ""}`} onSubmit={handleSubmit}>
+            <button
+              type="button"
+              className="feed-create-toggle"
+              onClick={() => setIsCreateFormOpen((isOpen) => !isOpen)}
+              aria-expanded={isCreateFormOpen}
+              aria-controls="feed-create-fields"
+            >
+              <span className="feed-create-title">
                 <span>🤫</span>
                 <span>Soltar Fofoca no Campus</span>
-              </div>
+              </span>
+              <span className="feed-create-toggle-icon" aria-hidden="true">{isCreateFormOpen ? "▲" : "＋"}</span>
+            </button>
+
+            {isCreateFormOpen && <div id="feed-create-fields">
+            <div className="feed-create-header">
               <div className="anonymous-badge">
                 <span>🔒</span>
                 <span>Garantia de Anonimato: Seu nome nunca aparece no post</span>
               </div>
             </div>
 
-            {/* Seletor de Categoria em Chips */}
-            <div style={{ marginBottom: "8px", fontSize: "11px", fontWeight: 800, textTransform: "uppercase", color: "#666" }}>
-              Escolha a Categoria:
-            </div>
-            <div className="category-chips-row">
-              {categories.map((item) => (
-                <button
-                  key={item.value}
-                  type="button"
-                  className={`category-chip-btn ${category === item.value ? "active" : ""}`}
-                  onClick={() => setCategory(item.value)}
-                >
-                  <span>{item.icon}</span>
-                  <span>{item.label}</span>
-                </button>
-              ))}
+            <div className="category-picker">
+              <button
+                type="button"
+                className="category-picker-toggle"
+                onClick={() => setIsCategoryPickerOpen((isOpen) => !isOpen)}
+                aria-expanded={isCategoryPickerOpen}
+                aria-controls="post-category-options"
+              >
+                <span>Categoria: <strong>{categoryIcons[category]} {categoryLabels[category]}</strong></span>
+                <span aria-hidden="true">{isCategoryPickerOpen ? "▲" : "▼"}</span>
+              </button>
+              {isCategoryPickerOpen && (
+                <div id="post-category-options" className="category-chips-row">
+                  {categories.map((item) => (
+                    <button
+                      key={item.value}
+                      type="button"
+                      className={`category-chip-btn ${category === item.value ? "active" : ""}`}
+                      onClick={() => {
+                        setCategory(item.value);
+                        setIsCategoryPickerOpen(false);
+                      }}
+                    >
+                      <span>{item.icon}</span>
+                      <span>{item.label}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
 
             <input
@@ -752,6 +795,7 @@ export default function FeedPage() {
             </div>
 
             {error && <p className="form-error" role="alert" style={{ marginTop: "14px" }}>{error}</p>}
+            </div>}
           </form>
 
           {/* ========================================================
@@ -899,26 +943,39 @@ export default function FeedPage() {
               )}
             </main>
 
-            {/* Botão Carregar Mais Fofocas */}
-            {hasMore && !isLoading && (
-              <div style={{ textAlign: "center", padding: "24px 0 8px" }}>
+            {totalPages > 1 && !isLoading && (
+              <nav className="feed-pagination" aria-label="Paginação das fofocas">
                 <button
                   type="button"
-                  className="pink-button"
-                  onClick={loadMorePosts}
-                  disabled={isLoadingMore}
-                  style={{ margin: 0, width: "auto", minWidth: "220px", fontSize: "13px" }}
+                  className="feed-page-btn"
+                  onClick={() => void loadPage(currentPage - 1)}
+                  disabled={isLoadingMore || currentPage === 0}
+                  aria-label="Página anterior"
                 >
-                  {isLoadingMore ? (
-                    <span style={{ display: "inline-flex", alignItems: "center", gap: "8px" }}>
-                      <span className="loading-spinner" style={{ width: "14px", height: "14px", borderWidth: "2px" }} />
-                      Carregando...
-                    </span>
-                  ) : (
-                    "📜 Carregar mais fofocas"
-                  )}
+                  ←
                 </button>
-              </div>
+                {Array.from({ length: totalPages }, (_, page) => (
+                  <button
+                    key={page}
+                    type="button"
+                    className={`feed-page-btn ${currentPage === page ? "active" : ""}`}
+                    onClick={() => void loadPage(page)}
+                    disabled={isLoadingMore}
+                    aria-current={currentPage === page ? "page" : undefined}
+                  >
+                    {page + 1}
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  className="feed-page-btn"
+                  onClick={() => void loadPage(currentPage + 1)}
+                  disabled={isLoadingMore || currentPage >= totalPages - 1}
+                  aria-label="Próxima página"
+                >
+                  →
+                </button>
+              </nav>
             )}
 
             {/* Coluna Lateral: Radar do Campus UERJ */}
@@ -964,34 +1021,6 @@ export default function FeedPage() {
                     <strong>3. Verdade no Bandejão:</strong> Se o suco for de caju, avise a galera com antecedência.
                   </div>
                 </div>
-              </div>
-
-              {/* CARD 3: Atalhos Rápidos */}
-              <div className="sidebar-card">
-                <div className="sidebar-card-title">
-                  <strong>🚀 ATALHOS RÁPIDOS</strong>
-                  <span>HUB</span>
-                </div>
-                <Link className="sidebar-shortcut-btn" href="/crushes">
-                  <span>💘 Galeria de Crushes</span>
-                  <span>→</span>
-                </Link>
-                <Link className="sidebar-shortcut-btn" href="/vendas">
-                  <span>🛍️ Desapegos & Vendas</span>
-                  <span>→</span>
-                </Link>
-                <Link className="sidebar-shortcut-btn" href="/eventos">
-                  <span>📅 Calendário de Festas</span>
-                  <span>→</span>
-                </Link>
-                <Link className="sidebar-shortcut-btn" href="/grupos">
-                  <span>👥 Grupos de WhatsApp</span>
-                  <span>→</span>
-                </Link>
-                <Link className="sidebar-shortcut-btn" href="/como-usar">
-                  <span>📖 Como usar o site</span>
-                  <span>→</span>
-                </Link>
               </div>
 
             </aside>
